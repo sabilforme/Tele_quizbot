@@ -7,8 +7,10 @@ services:
     startCommand: python bot.py
     envVars:
       - key: BOT_TOKEN
-        value: "7761296155:AAFhJXXxLc5WxOWw5VN0Q82JrzywgFiI4_Q"
-      - key: API_KEY
-        value: "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"
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OCR_SPACE_API_KEY
+        sync: false
       - key: LANG
         value: ar
