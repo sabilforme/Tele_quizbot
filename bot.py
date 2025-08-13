@@ -168,10 +168,10 @@ async def receive_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 def main():
-    token = os.getenv("7761296155:AAFhJXXxLc5WxOWw5VN0Q82JrzywgFiI4_Q")
-    if not token:
+    BOT_TOKEN = os.getenv("7761296155:AAFhJXXxLc5WxOWw5VN0Q82JrzywgFiI4_Q")
+    if not BOT_TOKEN:
         raise SystemExit("Set BOT_TOKEN env var")
-    app = ApplicationBuilder().token(token).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("cancel", cmd_cancel))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
