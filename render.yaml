@@ -1,0 +1,14 @@
+services:
+  - type: worker
+    name: telegram-quiz-bot
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: "7761296155:AAFhJXXxLc5WxOWw5VN0Q82JrzywgFiI4_Q"
+        sync: false
+      - key: "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"
+        sync: false
+      - key: LANG
+        value: ar
