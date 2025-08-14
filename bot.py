@@ -21,7 +21,7 @@ from ingest import extract_text_any
 
 # ================= إعداد المتغيرات =================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = os.getenv("ADMIN_ID", "").strip()  # نصي، سيتم التعامل معه كسلسلة
+ADMIN_ID = 481595387
 
 if not BOT_TOKEN or not ADMIN_ID:
     raise SystemExit("Set BOT_TOKEN and ADMIN_ID env vars")
