@@ -1,6 +1,5 @@
 import os
 import json
-import math
 import httpx
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -26,9 +25,10 @@ PROMPT_AR = (
     "- TF: الخيارات يجب أن تكون ['True/صح','False/خطأ'] مع صياغة دقيقة قابلة للتحقق من النص.\n"
     "- غطِّ جميع المحاور والجزئيات والمفاهيم والأمثلة والتعاريف والصيغ.\n"
     "- اجعل الأسئلة متنوعة الصعوبة وتشمل مفاهيم متداخلة وربط أفكار.\n"
-    "- أعد الناتج JSON Array فقط بالصورة: \n"
-    "[{\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"Option1\",\"Option2\",\"Option3\",\"Option4\"],\"correct\":0}, {\"type\":\"tf\",\"question\":\"...\",\"options\":[\"True/صح\",\"False/خطأ\"],\"correct\":1}]\n"
-    "النص:\n{chunk}\n"
+    "- أعد الناتج JSON Array فقط بالصورة:\n"
+    "[{{\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"Option1\",\"Option2\",\"Option3\",\"Option4\"],\"correct\":0}},"
+    "{{\"type\":\"tf\",\"question\":\"...\",\"options\":[\"True/صح\",\"False/خطأ\"],\"correct\":1}}]\n"
+    "النص:\n{chunk}"
 )
 
 PROMPT_EN = (
@@ -38,27 +38,36 @@ PROMPT_EN = (
     "- TF: options must be ['True','False'] with statements verifiable from the text.\n"
     "- Cover all topics, definitions, formulas, edge cases, and examples.\n"
     "- Vary difficulty across Bloom levels and interleave concepts.\n"
-    "- Return JSON Array ONLY in the form above.\n\n"
-    "TEXT:\n{chunk}\n"
+    "- Return JSON Array ONLY in the form above:\n"
+    "[{{\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"Option1\",\"Option2\",\"Option3\",\"Option4\"],\"correct\":0}},"
+    "{{\"type\":\"tf\",\"question\":\"...\",\"options\":[\"True\",\"False\"],\"correct\":1}}]\n"
+    "TEXT:\n{chunk}"
 )
 
 async def _ask_chunk(chunk: str, lang: str) -> list:
     if not API_KEY:
         return []
-    sys = SYS_AR if lang == "ar" else SYS_EN
+    sys_msg = SYS_AR if lang == "ar" else SYS_EN
     prompt = PROMPT_AR if lang == "ar" else PROMPT_EN
+
+    # استخدم replace بدلاً من format لتجنب مشاكل الأقواس
+    prompt_text = prompt.replace("{chunk}", chunk)
 
     payload = {
         "model": MODEL,
         "temperature": 0.2,
         "messages": [
-            {"role": "system", "content": sys},
-            {"role": "user", "content": prompt.format(chunk=chunk[:6000])},
+            {"role": "system", "content": sys_msg},
+            {"role": "user", "content": prompt_text},
         ],
     }
 
-    async with httpx.AsyncClient(timeout=120) as client:
-        r = await client.post(GROQ_URL, headers={"Authorization": f"Bearer {API_KEY}"}, json=payload)
+    async with httpx.AsyncClient(timeout=300) as client:  # زيادة الوقت للملفات الكبيرة
+        r = await client.post(
+            GROQ_URL,
+            headers={"Authorization": f"Bearer {API_KEY}"},
+            json=payload
+        )
         r.raise_for_status()
         data = r.json()
         content = data["choices"][0]["message"]["content"]
@@ -72,8 +81,11 @@ async def _ask_chunk(chunk: str, lang: str) -> list:
     return []
 
 
-def _split_text(text: str, max_len: int = 8000):
-    # تقسيم بسيط حسب الفقرات/الجمل
+def _split_text(text: str, max_len: int = None):
+    # إذا max_len=None، لا يوجد حد
+    if max_len is None:
+        return [text]
+
     parts = []
     buff = []
     count = 0
@@ -92,13 +104,12 @@ def _split_text(text: str, max_len: int = 8000):
     return parts
 
 
-async def ask_llm_big(text: str, lang: str, target_total: int = 40) -> list:
-    chunks = _split_text(text)
-    per_chunk_target = max(8, target_total // max(1, len(chunks)))
+async def ask_llm_big(text: str, lang: str, target_total: int = None) -> list:
+    chunks = _split_text(text, max_len=None)  # بدون حد
     out = []
     for ch in chunks:
         arr = await _ask_chunk(ch, lang)
         if not arr:
             continue
-        out.extend(arr[: per_chunk_target + 4])  # خذ أكثر قليلًا
-    return out[: target_total * 2]  # قص لاحقًا بعد التنظيف
+        out.extend(arr)
+    return out  # بدون أي حد على عدد الأسئلة
