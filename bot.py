@@ -21,7 +21,7 @@ from ingest import extract_text_any
 
 # ================= إعداد المتغيرات =================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID =481595387
+ADMIN_ID = "481595387"
 
 if not BOT_TOKEN or not ADMIN_ID:
     raise SystemExit("Set BOT_TOKEN and ADMIN_ID env vars")
@@ -113,7 +113,7 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= لوحة تحكم المدير =================
 async def control_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    if str(update.effective_user.id) != ADMIN_ID:
         await update.message.reply_text("هذه الميزة للمدير فقط.")
         return
 
