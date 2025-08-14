@@ -27,8 +27,7 @@ PROMPT_AR = (
     "- غطِّ جميع المحاور والجزئيات والمفاهيم والأمثلة والتعاريف والصيغ.\n"
     "- اجعل الأسئلة متنوعة الصعوبة وتشمل مفاهيم متداخلة وربط أفكار.\n"
     "- أعد الناتج JSON Array فقط بالصورة: \n"
-    "[{\"type\":\"mcq\",\"question\":\"...\",\"options\":["..","..","..",".."],\"correct\":0..3}, {\"type\":\"tf\",\"question\":\"...\",\"options\":[\"True/صح\",\"False/خطأ\"],\"correct\":0 or 1}]\n"
-    "- لا تضف أي نص خارج JSON.\n\n"
+    "[{\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"Option1\",\"Option2\",\"Option3\",\"Option4\"],\"correct\":0}, {\"type\":\"tf\",\"question\":\"...\",\"options\":[\"True/صح\",\"False/خطأ\"],\"correct\":1}]\n"
     "النص:\n{chunk}\n"
 )
 
