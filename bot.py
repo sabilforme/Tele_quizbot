@@ -22,12 +22,7 @@ from ingest import extract_text_any
 LANG_UI_DEFAULT = os.getenv("LANG", "ar")  # واجهة البوت فقط
 MAX_FILE_MB = int(os.getenv("MAX_FILE_MB", 16))
 
-ADMIN_ID = os.getenv("ADMIN_ID", "").strip()  # قيمة نصية فقط
-
-# داخل decorator أو أي مكان مقارنة
-if str(update.effective_user.id) != ADMIN_ID:
-    await update.message.reply_text("هذه الميزة للمدير فقط.")
-    return
+ADMIN_ID = 481595387
 
 DATA_FILE = "bot_users.json"
 
