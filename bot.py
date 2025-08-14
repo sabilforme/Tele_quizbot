@@ -113,7 +113,7 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= لوحة تحكم المدير =================
 async def control_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if str(update.effective_user.id) != ADMIN_ID:
+    if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("هذه الميزة للمدير فقط.")
         return
 
