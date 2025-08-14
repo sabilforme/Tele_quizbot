@@ -363,8 +363,7 @@ def main():
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_document))
     app.add_handler(CallbackQueryHandler(choose_language, pattern=r"^lang_(ar|en)$"))
     
-    # استقبال إجابات الاختبارات
-  app.add_handler(PollAnswerHandler(receive_poll_answer))
+    # استقبال إجابات الاختبارات    app.add_handler(PollAnswerHandler(receive_poll_answer))
 
     print("Bot running…")
     app.run_polling(close_loop=False)
