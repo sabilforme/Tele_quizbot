@@ -4,7 +4,7 @@ import json
 import tempfile
 from typing import Dict
 
-from telegram import Update, Poll, constants, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, Poll, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -18,8 +18,16 @@ from telegram.ext import (
 from qa_builder import build_quiz_from_text
 from ingest import extract_text_any
 
+# ================= إعدادات =================
 LANG_UI_DEFAULT = os.getenv("LANG", "ar")  # واجهة البوت فقط
 MAX_FILE_MB = int(os.getenv("MAX_FILE_MB", 16))
+
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0")) 
+
+if ADMIN_ID == 0:
+    raise SystemExit("Set ADMIN_ID env var")
+
+DATA_FILE = "bot_users.json"
 
 SESSIONS: Dict[int, Dict] = {}
 
@@ -32,10 +40,28 @@ WELCOME_EN = (
     "Commands: /start /cancel"
 )
 
+# ================= إدارة المستخدمين =================
+try:
+    with open(DATA_FILE, "r") as f:
+        data = json.load(f)
+        allowed_users = set(data.get("allowed_users", []))
+        banned_users = set(data.get("banned_users", []))
+        pending_users = set(data.get("pending_users", []))
+except FileNotFoundError:
+    allowed_users = set()
+    banned_users = set()
+    pending_users = set()
+
+def save_data():
+    with open(DATA_FILE, "w") as f:
+        json.dump({
+            "allowed_users": list(allowed_users),
+            "banned_users": list(banned_users),
+            "pending_users": list(pending_users)
+        }, f)
 
 def _ui(text_ar: str, text_en: str) -> str:
     return text_ar if LANG_UI_DEFAULT == "ar" else text_en
-
 
 def _clean_text(t: str) -> str:
     t = t.replace("\u200f", " ").replace("\u200e", " ")
@@ -43,11 +69,37 @@ def _clean_text(t: str) -> str:
     t = re.sub(r"\s+", " ", t)
     return t.strip()
 
+# ================= Decorator للتحقق من المدير =================
+def admin_only(func):
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_user.id != ADMIN_ID:
+            await update.message.reply_text("هذه الميزة للمدير فقط.")
+            return
+        return await func(update, context)
+    return wrapper
 
+# ================= Start + الموافقة =================
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id in banned_users:
+        await update.message.reply_text("تم حظرك من استخدام هذا البوت.")
+        return
+    if user_id not in allowed_users:
+        if user_id not in pending_users:
+            pending_users.add(user_id)
+            save_data()
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ قبول", callback_data=f"approve_{user_id}"),
+                 InlineKeyboardButton("❌ رفض", callback_data=f"reject_{user_id}")]
+            ])
+            await context.bot.send_message(chat_id=ADMIN_ID,
+                text=f"مستخدم جديد طلب استخدام البوت:\n{update.effective_user.username} (ID: {user_id})",
+                reply_markup=kb)
+        await update.message.reply_text("في انتظار موافقة المدير لاستخدام البوت.")
+        return
     await update.message.reply_text(_ui(WELCOME_AR, WELCOME_EN))
 
-
+# ================= إلغاء الاختبار =================
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if chat_id in SESSIONS:
@@ -56,19 +108,82 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(_ui("لا يوجد اختبار جارٍ الآن.", "No active quiz."))
 
+# ================= إدارة الأزرار (الموافقة / الرفض) =================
+async def handle_approval(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data.startswith("approve_") or data.startswith("reject_"):
+        user_id = int(data.split("_")[1])
+        if data.startswith("approve_"):
+            pending_users.discard(user_id)
+            allowed_users.add(user_id)
+            save_data()
+            await query.edit_message_text(f"تم قبول المستخدم {user_id} ✅")
+            await context.bot.send_message(chat_id=user_id, text="تمت الموافقة على استخدامك البوت! يمكنك الآن إرسال الملفات.")
+        else:
+            pending_users.discard(user_id)
+            banned_users.add(user_id)
+            save_data()
+            await query.edit_message_text(f"تم رفض المستخدم {user_id} ❌")
+            await context.bot.send_message(chat_id=user_id, text="تم رفض طلبك لاستخدام البوت.")
 
-# ---------- استقبال الملفات ثم اختيار لغة المحتوى ----------
+# ================= لوحة التحكم الرئيسية =================
+@admin_only
+async def control_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("المستخدمون المصرح لهم", callback_data="show_allowed")],
+        [InlineKeyboardButton("المستخدمون المعلقون", callback_data="show_pending")],
+        [InlineKeyboardButton("إرسال رسالة جماعية", callback_data="broadcast")],
+    ])
+    await update.message.reply_text("لوحة التحكم الرئيسية:", reply_markup=kb)
+
+async def handle_control_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data == "show_allowed":
+        if not allowed_users:
+            await query.edit_message_text("لا يوجد مستخدمون حاليًا.")
+            return
+        text = "المستخدمون المصرح لهم:\n" + "\n".join([str(u) for u in allowed_users])
+        await query.edit_message_text(text)
+    elif data == "show_pending":
+        if not pending_users:
+            await query.edit_message_text("لا يوجد مستخدمون في الانتظار.")
+            return
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"✅ قبول {u}", callback_data=f"approve_{u}"),
+             InlineKeyboardButton(f"❌ رفض {u}", callback_data=f"reject_{u}")]
+            for u in pending_users
+        ])
+        await query.edit_message_text("المستخدمون في الانتظار:", reply_markup=kb)
+    elif data == "broadcast":
+        await query.edit_message_text("استخدم الأمر /broadcast <رسالتك> لإرسال رسالة لجميع المستخدمين المصرح لهم.")
+
+@admin_only
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("استخدم: /broadcast <رسالتك>")
+        return
+    message = " ".join(context.args)
+    for user_id in allowed_users:
+        await context.bot.send_message(chat_id=user_id, text=message)
+    await update.message.reply_text("تم الإرسال لجميع المستخدمين المصرح لهم.")
+
+# ================= استقبال الملفات =================
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in allowed_users:
+        await update.message.reply_text("لا يمكنك استخدام البوت قبل موافقة المدير.")
+        return
+
     chat_id = update.effective_chat.id
     doc = update.message.document or update.message.photo[-1] if update.message.photo else None
-    # دعم الصور المرسلة كـ photo
     if not doc and update.message.document is None and update.message.photo:
-        # photo تُعامل هنا لاحقًا
         pass
-
-    # لو جت صورة
     if update.message.photo:
-        # حمّل أعلى دقة
         photo = update.message.photo[-1]
         tgfile = await context.bot.get_file(photo.file_id)
         file_bytes = await tgfile.download_as_bytearray()
@@ -90,7 +205,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tgfile = await context.bot.get_file(d.file_id)
         file_bytes = await tgfile.download_as_bytearray()
 
-    # خزّن الملف مؤقتًا بالذاكرة واطلب اللغة
     SESSIONS[chat_id] = {
         "stage": "await_lang",
         "filename": filename,
@@ -104,7 +218,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
     await update.message.reply_text(_ui("اختر لغة محتوى الملف:", "Choose the file content language:"), reply_markup=kb)
 
-
+# ================= اختيار اللغة =================
 async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -117,10 +231,8 @@ async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = "ar" if query.data == "lang_ar" else "en"
     sess["lang"] = lang
     sess["stage"] = "processing"
-
     await query.edit_message_text(_ui("جاري تحليل الملف وإعداده… ⏳", "Analyzing the file… ⏳"))
 
-    # اكتب الملف مؤقتًا على القرص
     with tempfile.NamedTemporaryFile(delete=False, suffix=sess["suffix"]) as f:
         f.write(sess["file_bytes"])
         tmp_path = f.name
@@ -149,17 +261,19 @@ async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
         SESSIONS.pop(chat_id, None)
         return
 
-    sess.update({"questions": questions, "index": 0, "score": 0, "answers": {}, "stage": "quiz"})
+    sess.update({"questions": questions, "index":0, "score": 0, "answers": {}, "stage": "quiz"})
     await send_next_question(chat_id, context)
 
-
+# ================= إرسال الأسئلة التالية =================
 async def send_next_question(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     sess = SESSIONS.get(chat_id)
     if not sess or sess.get("stage") != "quiz":
         return
 
     if sess["index"] >= len(sess["questions"]):
-        await context.bot.send_message(chat_id=chat_id, text=_ui(f"انتهى الاختبار! نتيجتك: {sess['score']}/{len(sess['questions'])} ✅", f"Done! Your score: {sess['score']}/{len(sess['questions'])} ✅"))
+        await context.bot.send_message(chat_id=chat_id, text=_ui(
+            f"انتهى الاختبار! نتيجتك: {sess['score']}/{len(sess['questions'])} ✅",
+            f"Done! Your score: {sess['score']}/{len(sess['questions'])} ✅"))
         SESSIONS.pop(chat_id, None)
         return
 
@@ -176,7 +290,7 @@ async def send_next_question(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     sess["answers"][msg.poll.id] = int(q["correct"])
     sess["index"] += 1
 
-
+# ================= استقبال إجابات الاختبار =================
 async def receive_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     answer = update.poll_answer
     for chat_id, sess in list(SESSIONS.items()):
@@ -184,26 +298,35 @@ async def receive_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
             correct = sess["answers"][answer.poll_id]
             if answer.option_ids and answer.option_ids[0] == correct:
                 sess["score"] += 1
-            # بعد كل إجابة نرسل السؤال التالي
             await send_next_question(chat_id, context)
             break
 
-
+# ================= تشغيل البوت =================
 def main():
     token = os.getenv("BOT_TOKEN")
     if not token:
         raise SystemExit("Set BOT_TOKEN env var")
     app = ApplicationBuilder().token(token).build()
 
+    # أوامر المستخدم
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("cancel", cmd_cancel))
+    app.add_handler(CommandHandler("control", control_panel))
+    app.add_handler(CommandHandler("broadcast", broadcast))
+
+    # استقبال الملفات
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_document))
+    # أزرار اختيار اللغة
     app.add_handler(CallbackQueryHandler(choose_language, pattern=r"^lang_(ar|en)$"))
+    # أزرار الموافقة / الرفض
+    app.add_handler(CallbackQueryHandler(handle_approval, pattern=r"^(approve|reject)_\d+$"))
+    # أزرار لوحة التحكم
+    app.add_handler(CallbackQueryHandler(handle_control_buttons, pattern=r"^(show_allowed|show_pending|broadcast)$"))
+    # استقبال إجابات الاختبار
     app.add_handler(PollAnswerHandler(receive_poll_answer))
 
     print("Bot running…")
     app.run_polling(close_loop=False)
-
 
 if __name__ == "__main__":
     main()
