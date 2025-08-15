@@ -103,7 +103,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=kb)
         await update.message.reply_text("في انتظار موافقة المدير لاستخدام البوت.")
         return
-    await update.message.reply_text(_ui(WELCOME_AR, WELCOME_EN), parse_mode="MarkdownV2")
+    await update.message.reply_text(_ui(WELCOME_AR, WELCOME_EN), parse_mode="Markdown")
 
 # ================= إلغاء الاختبار =================
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
