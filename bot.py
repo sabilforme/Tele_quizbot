@@ -27,12 +27,23 @@ DATA_FILE = "bot_users.json"
 SESSIONS: Dict[int, Dict] = {}
 
 WELCOME_AR = (
-    "أهلًا! أرسل ملف (PDF/DOCX/PPTX/TXT/صور) وسأحوّله لأسئلة قوية بالذكاء الاصطناعي.\n\n"
-    "الأوامر: /start /cancel"
+    "🎯 **مرحبًا بك في Bashar QuizBot Vip** 🤖✨\n"
+    "أرسل **📄 PDF / DOCX / PPTX / TXT / 🖼 صورة**\n"
+    "وسيحوّله البوت فورًا إلى **أسئلة اختبار قوية ودقيقة** باستخدام الذكاء الاصطناعي.\n\n"
+    "⚡ **أوامر البوت:**\n"
+    "`/start` ➡ بدء استخدام البوت\n"
+    "`/cancel` ➡ إلغاء العملية\n\n"
+    "💡 احصل على أسئلة احترافية في ثوانٍ!"
 )
+
 WELCOME_EN = (
-    "Hi! Send a PDF/DOCX/PPTX/TXT/Image and I'll turn it into strong exam questions using AI.\n\n"
-    "Commands: /start /cancel"
+    "🎯 **Welcome to Bashar QuizBot Vip** 🤖✨\n"
+    "Send a **📄 PDF / DOCX / PPTX / TXT / 🖼 Image** and watch it instantly transform "
+    "into **powerful, precise exam questions** using AI.\n\n"
+    "⚡ **Bot Commands:**\n"
+    "`/start` ➡ Start the bot\n"
+    "`/cancel` ➡ Cancel the process\n\n"
+    "💡 Get professional-grade questions in seconds!"
 )
 
 # ================= إدارة المستخدمين =================
@@ -92,7 +103,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=kb)
         await update.message.reply_text("في انتظار موافقة المدير لاستخدام البوت.")
         return
-    await update.message.reply_text(_ui(WELCOME_AR, WELCOME_EN))
+    await update.message.reply_text(_ui(WELCOME_AR, WELCOME_EN), parse_mode="MarkdownV2")
 
 # ================= إلغاء الاختبار =================
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
