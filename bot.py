@@ -48,10 +48,73 @@ WELCOME_EN = (
 )
 
 # ================= نظام تخزين متقدم =================
+def migrate_old_data(old_data):
+    """تحويل البيانات من النسخة القديمة إلى الهيكل الجديد"""
+    new_data = {
+        "users": {},
+        "files": [],
+        "events": [],
+        "statistics": {
+            "total_users": 0,
+            "active_today": 0,
+            "files_processed": 0,
+            "quizzes_taken": 0
+        }
+    }
+    
+    # تحويل المستخدمين
+    for user_id in old_data.get("allowed_users", []):
+        new_data["users"][str(user_id)] = {
+            "status": "allowed",
+            "username": "unknown_old_user",
+            "full_name": "Unknown Old User",
+            "join_date": datetime.now().isoformat(),
+            "last_activity": datetime.now().isoformat(),
+            "files_sent": 0,
+            "quizzes_taken": 0,
+            "total_score": 0
+        }
+        new_data["statistics"]["total_users"] += 1
+    
+    for user_id in old_data.get("banned_users", []):
+        new_data["users"][str(user_id)] = {
+            "status": "banned",
+            "username": "unknown_old_user",
+            "full_name": "Unknown Old User",
+            "join_date": datetime.now().isoformat(),
+            "last_activity": datetime.now().isoformat(),
+            "files_sent": 0,
+            "quizzes_taken": 0,
+            "total_score": 0
+        }
+        new_data["statistics"]["total_users"] += 1
+    
+    for user_id in old_data.get("pending_users", []):
+        new_data["users"][str(user_id)] = {
+            "status": "pending",
+            "username": "unknown_old_user",
+            "full_name": "Unknown Old User",
+            "join_date": datetime.now().isoformat(),
+            "last_activity": datetime.now().isoformat(),
+            "files_sent": 0,
+            "quizzes_taken": 0,
+            "total_score": 0
+        }
+        new_data["statistics"]["total_users"] += 1
+    
+    return new_data
+
 def load_data():
     try:
         with open(DATA_FILE, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+            
+            # تحويل البيانات القديمة إلى الهيكل الجديد
+            if "users" not in data:
+                data = migrate_old_data(data)
+                save_data(data)
+                
+            return data
     except FileNotFoundError:
         return {
             "users": {},
@@ -89,15 +152,23 @@ def log_event(user_id, event_type, details=None):
     save_data(data)
 
 # ================= إدارة المستخدمين =================
-try:
+def refresh_user_lists():
     data = load_data()
-    allowed_users = set(int(uid) for uid in data["users"] if data["users"][uid]["status"] == "allowed")
-    banned_users = set(int(uid) for uid in data["users"] if data["users"][uid]["status"] == "banned")
-    pending_users = set(int(uid) for uid in data["users"] if data["users"][uid]["status"] == "pending")
-except Exception:
     allowed_users = set()
     banned_users = set()
     pending_users = set()
+    
+    for user_id, user_data in data["users"].items():
+        if user_data["status"] == "allowed":
+            allowed_users.add(int(user_id))
+        elif user_data["status"] == "banned":
+            banned_users.add(int(user_id))
+        elif user_data["status"] == "pending":
+            pending_users.add(int(user_id))
+    
+    return allowed_users, banned_users, pending_users
+
+allowed_users, banned_users, pending_users = refresh_user_lists()
 
 def _ui(text_ar: str, text_en: str) -> str:
     return text_ar if LANG_UI_DEFAULT == "ar" else text_en
@@ -119,11 +190,17 @@ def admin_only(func):
 
 # ================= Start + الموافقة =================
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global allowed_users, banned_users, pending_users
     user_id = update.effective_user.id
     username = update.effective_user.username or "غير معروف"
     full_name = update.effective_user.full_name
     
     data = load_data()
+    
+    # تأكد من وجود مفتاح 'users'
+    if "users" not in data:
+        data = migrate_old_data({})
+        save_data(data)
     
     # تسجيل مستخدم جديد
     if str(user_id) not in data["users"]:
@@ -140,6 +217,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data["statistics"]["total_users"] += 1
         save_data(data)
         log_event(user_id, "user_join")
+    
+    # تحديث قوائم المستخدمين
+    allowed_users, banned_users, pending_users = refresh_user_lists()
     
     if user_id in banned_users:
         await update.message.reply_text("تم حظرك من استخدام هذا البوت.")
@@ -174,6 +254,7 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= إدارة الأزرار (الموافقة / الرفض) =================
 async def handle_approval(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global allowed_users, banned_users, pending_users
     query = update.callback_query
     await query.answer()
     data = query.data
@@ -186,8 +267,6 @@ async def handle_approval(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "approve":
         if user_key in db_data["users"]:
             db_data["users"][user_key]["status"] = "allowed"
-            allowed_users.add(user_id)
-            pending_users.discard(user_id)
             save_data(db_data)
             await query.edit_message_text(f"تم قبول المستخدم {user_id} ✅")
             await context.bot.send_message(
@@ -198,8 +277,6 @@ async def handle_approval(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif action == "reject":
         if user_key in db_data["users"]:
             db_data["users"][user_key]["status"] = "banned"
-            banned_users.add(user_id)
-            pending_users.discard(user_id)
             save_data(db_data)
             await query.edit_message_text(f"تم رفض المستخدم {user_id} ❌")
             await context.bot.send_message(
@@ -207,6 +284,9 @@ async def handle_approval(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text="تم رفض طلبك لاستخدام البوت."
             )
             log_event(user_id, "user_rejected")
+    
+    # تحديث قوائم المستخدمين
+    allowed_users, banned_users, pending_users = refresh_user_lists()
 
 # ================= لوحة التحكم الرئيسية =================
 @admin_only
