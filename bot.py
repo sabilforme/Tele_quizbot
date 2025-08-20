@@ -28,9 +28,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ================= إعدادات البوت =================
-LANG_UI_DEFAULT = os.getenv("LANG", "ar")  # واجهة البوت فقط
+LANG_UI_DEFAULT = os.getenv("LANG", "ar")
 MAX_FILE_MB = int(os.getenv("MAX_FILE_MB", 16))
-ADMIN_ID = int(os.getenv("ADMIN_ID", 481595387))  # يجب تعيينه في المتغيرات البيئية
+ADMIN_ID = int(os.getenv("ADMIN_ID", 481595387))
 DATA_FILE = "bot_users.json"
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
@@ -38,25 +38,8 @@ if not BOT_TOKEN:
     raise ValueError("يجب تعيين متغير البيئة BOT_TOKEN")
 
 # ================= نصوص الواجهة =================
-WELCOME_AR = (
-    "🎯 **مرحبًا بك في Bashar QuizBot Vip** 🤖✨\n"
-    "أرسل **📄 PDF / DOCX / PPTX / TXT / 🖼 صورة**\n"
-    "وسيحوّله البوت فورًا إلى **أسئلة اختبار قوية ودقيقة** باستخدام الذكاء الاصطناعي.\n\n"
-    "⚡ **أوامر البوت:**\n"
-    "`/start` ➡ بدء استخدام البوت\n"
-    "`/cancel` ➡ إلغاء العملية\n\n"
-    "💡 احصل على أسئلة احترافية في ثوانٍ!"
-)
-
-WELCOME_EN = (
-    "🎯 **Welcome to Bashar QuizBot Vip** 🤖✨\n"
-    "Send a **📄 PDF / DOCX / PPTX / TXT / 🖼 Image** and watch it instantly transform "
-    "into **powerful, precise exam questions** using AI.\n\n"
-    "⚡ **Bot Commands:**\n"
-    "`/start` ➡ Start the bot\n"
-    "`/cancel` ➡ Cancel the process\n\n"
-    "💡 Get professional-grade questions in seconds!"
-)
+WELCOME_AR = "🎯 **مرحبًا بك في Bashar QuizBot Vip** 🤖✨\nأرسل **📄 PDF / DOCX / PPTX / TXT / 🖼 صورة**\nوسيحوّله البوت فورًا إلى **أسئلة اختبار قوية ودقيقة** باستخدام الذكاء الاصطناعي.\n\n⚡ **أوامر البوت:**\n`/start` ➡ بدء استخدام البوت\n`/cancel` ➡ إلغاء العملية\n\n💡 احصل على أسئلة احترافية في ثوانٍ!"
+WELCOME_EN = "🎯 **Welcome to Bashar QuizBot Vip** 🤖✨\nSend a **📄 PDF / DOCX / PPTX / TXT / 🖼 Image** and watch it instantly transform into **powerful, precise exam questions** using AI.\n\n⚡ **Bot Commands:**\n`/start` ➡ Start the bot\n`/cancel` ➡ Cancel the process\n\n💡 Get professional-grade questions in seconds!"
 
 # ================= هياكل البيانات =================
 SESSIONS: Dict[int, Dict] = {}
@@ -67,8 +50,8 @@ pending_users: Set[int] = set()
 # ================= نظام إدارة اللغات =================
 class LanguageManager:
     def __init__(self):
-        self.content_lang = {}  # لغة محتوى الملف
-        self.quiz_lang = {}     # لغة الأسئلة
+        self.content_lang = {}
+        self.quiz_lang = {}
 
     def set_content_lang(self, chat_id: int, lang: str):
         self.content_lang[chat_id] = lang
@@ -100,44 +83,51 @@ def is_admin(user_id: int) -> bool:
 # ================= نظام التخزين =================
 def load_data() -> Dict:
     try:
+        if not os.path.exists(DATA_FILE):
+            return create_new_data()
+            
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             
-        # إصلاح: التحقق من نوع statistics
+        # الإصلاح الجذري: إذا كان statistics قائمة
         if isinstance(data.get("statistics"), list):
-            data["statistics"] = {
-                "total_users": 0,
-                "active_today": 0,
-                "files_processed": 0,
-                "quizzes_taken": 0
-            }
-        
-        # التأكد من وجود الهيكل الأساسي للبيانات
-        required_keys = ["users", "files", "events", "statistics"]
-        for key in required_keys:
-            if key not in data:
-                data[key] = {} if key == "users" else []
-        
-        if "statistics" in data and isinstance(data["statistics"], dict):
-            stats_keys = ["total_users", "active_today", "files_processed", "quizzes_taken"]
-            for key in stats_keys:
-                if key not in data["statistics"]:
-                    data["statistics"][key] = 0
-                    
+            data = create_new_data()
+            save_data(data)
+            return data
+            
+        # التأكد من الهيكل الأساسي
+        if not isinstance(data.get("users"), dict):
+            data["users"] = {}
+        if not isinstance(data.get("files"), list):
+            data["files"] = []
+        if not isinstance(data.get("events"), list):
+            data["events"] = []
+        if not isinstance(data.get("statistics"), dict):
+            data["statistics"] = {}
+            
+        # التأكد من وجود جميع مفاتيح statistics
+        stats_keys = ["total_users", "active_today", "files_processed", "quizzes_taken"]
+        for key in stats_keys:
+            if key not in data["statistics"]:
+                data["statistics"][key] = 0
+                
         return data
+        
     except (FileNotFoundError, json.JSONDecodeError):
-        # إنشاء بيانات جديدة
-        return {
-            "users": {},
-            "files": [],
-            "events": [],
-            "statistics": {
-                "total_users": 0,
-                "active_today": 0,
-                "files_processed": 0,
-                "quizzes_taken": 0
-            }
+        return create_new_data()
+
+def create_new_data():
+    return {
+        "users": {},
+        "files": [],
+        "events": [],
+        "statistics": {
+            "total_users": 0,
+            "active_today": 0,
+            "files_processed": 0,
+            "quizzes_taken": 0
         }
+    }
 
 def save_data(data: Dict):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -151,16 +141,19 @@ def refresh_user_lists():
     banned_users = set()
     pending_users = set()
 
-    for user_id, user_data in data["users"].items():
-        user_id_int = int(user_id)
-        status = user_data.get("status", "pending")
-        
-        if status == "allowed":
-            allowed_users.add(user_id_int)
-        elif status == "banned":
-            banned_users.add(user_id_int)
-        elif status == "pending":
-            pending_users.add(user_id_int)
+    for user_id, user_data in data.get("users", {}).items():
+        try:
+            user_id_int = int(user_id)
+            status = user_data.get("status", "pending")
+            
+            if status == "allowed":
+                allowed_users.add(user_id_int)
+            elif status == "banned":
+                banned_users.add(user_id_int)
+            elif status == "pending":
+                pending_users.add(user_id_int)
+        except (ValueError, TypeError):
+            continue
 
 def log_event(user_id: int, event_type: str, details: Dict = None):
     data = load_data()
@@ -172,7 +165,6 @@ def log_event(user_id: int, event_type: str, details: Dict = None):
     }
     data["events"].append(event)
 
-    # تحديث الإحصائيات
     if event_type == "file_upload":
         data["statistics"]["files_processed"] += 1
     elif event_type == "quiz_completed":
@@ -184,29 +176,24 @@ def log_event(user_id: int, event_type: str, details: Dict = None):
 def admin_only(func):
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
-        
         if not is_admin(user_id):
             if update.callback_query:
                 await update.callback_query.answer(_ui("هذه الميزة للمدير فقط.", "This feature is for admin only."), show_alert=True)
             else:
                 await update.message.reply_text(_ui("هذه الميزة للمدير فقط.", "This feature is for admin only."))
             return
-            
         return await func(update, context)
     return wrapper
 
 def user_allowed(func):
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
-        
         if user_id in banned_users:
             await update.message.reply_text(_ui("تم حظرك من استخدام هذا البوت.", "You are banned from using this bot."))
             return
-            
         if user_id not in allowed_users:
             await update.message.reply_text(_ui("في انتظار موافقة المدير لاستخدام البوت.", "Waiting for admin approval to use the bot."))
             return
-            
         return await func(update, context)
     return wrapper
 
@@ -216,18 +203,17 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username or "غير معروف"
     full_name = update.effective_user.full_name
 
-    data = load_data()
-    
-    # تحديث قوائم المستخدمين أولاً
     refresh_user_lists()
 
     if user_id in banned_users:
         await update.message.reply_text(_ui("تم حظرك من استخدام هذا البوت.", "You are banned from using this bot."))
         return
 
-    # تسجيل مستخدم جديد إذا لم يكن موجوداً
-    if str(user_id) not in data["users"]:
-        data["users"][str(user_id)] = {
+    data = load_data()
+    user_key = str(user_id)
+    
+    if user_key not in data["users"]:
+        data["users"][user_key] = {
             "username": username,
             "full_name": full_name,
             "join_date": datetime.now().isoformat(),
@@ -241,7 +227,6 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_data(data)
         log_event(user_id, "user_join")
         
-        # إرسال طلب الموافقة للمدير
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ قبول", callback_data=f"approve_{user_id}"),
              InlineKeyboardButton("❌ رفض", callback_data=f"reject_{user_id}")]
@@ -252,7 +237,6 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=kb
         )
         
-        # تحديث القوائم بعد إضافة المستخدم
         refresh_user_lists()
 
     if user_id not in allowed_users:
@@ -270,7 +254,7 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(_ui("لا يوجد اختبار جارٍ الآن.", "No active quiz."))
 
-# ================= إدارة المستخدمين (للمدير) =================
+# ================= إدارة المستخدمين =================
 @admin_only
 async def handle_approval(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -290,22 +274,15 @@ async def handle_approval(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db_data["users"][user_key]["status"] = "allowed"
         save_data(db_data)
         await query.edit_message_text(f"تم قبول المستخدم {user_id} ✅")
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=_ui("تمت الموافقة على استخدامك البوت! يمكنك الآن إرسال الملفات.", "Your access to the bot has been approved! You can now send files.")
-        )
+        await context.bot.send_message(chat_id=user_id, text=_ui("تمت الموافقة على استخدامك البوت! يمكنك الآن إرسال الملفات.", "Your access to the bot has been approved! You can now send files."))
         log_event(user_id, "user_approved")
     elif action == "reject":
         db_data["users"][user_key]["status"] = "banned"
         save_data(db_data)
         await query.edit_message_text(f"تم رفض المستخدم {user_id} ❌")
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=_ui("تم رفض طلبك لاستخدام البوت.", "Your request to use the bot has been rejected.")
-        )
+        await context.bot.send_message(chat_id=user_id, text=_ui("تم رفض طلبك لاستخدام البوت.", "Your request to use the bot has been rejected."))
         log_event(user_id, "user_rejected")
 
-    # تحديث قوائم المستخدمين
     refresh_user_lists()
 
 @admin_only
@@ -314,17 +291,8 @@ async def control_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stats = data["statistics"]
 
     text = _ui(
-        f"📊 **لوحة التحكم المتقدمة**\n\n"
-        f"👥 المستخدمون: {stats['total_users']}\n"
-        f"📤 الملفات المعالجة: {stats['files_processed']}\n"
-        f"🧠 الاختبارات المكتملة: {stats['quizzes_taken']}\n"
-        f"🔥 المستخدمون النشطون اليوم: {stats['active_today']}",
-
-        f"📊 **Advanced Control Panel**\n\n"
-        f"👥 Users: {stats['total_users']}\n"
-        f"📤 Files Processed: {stats['files_processed']}\n"
-        f"🧠 Quizzes Completed: {stats['quizzes_taken']}\n"
-        f"🔥 Active Users Today: {stats['active_today']}"
+        f"📊 **لوحة التحكم المتقدمة**\n\n👥 المستخدمون: {stats['total_users']}\n📤 الملفات المعالجة: {stats['files_processed']}\n🧠 الاختبارات المكتملة: {stats['quizzes_taken']}\n🔥 المستخدمون النشطون اليوم: {stats['active_today']}",
+        f"📊 **Advanced Control Panel**\n\n👥 Users: {stats['total_users']}\n📤 Files Processed: {stats['files_processed']}\n🧠 Quizzes Completed: {stats['quizzes_taken']}\n🔥 Active Users Today: {stats['active_today']}"
     )
 
     kb = InlineKeyboardMarkup([
@@ -361,37 +329,10 @@ async def handle_control_buttons(update: Update, context: ContextTypes.DEFAULT_T
         user_id = int(data.split("_")[2])
         await show_user_files(query, user_id)
     elif data == "back_to_control":
-        await control_panel_from_query(query, context)
+        await query.message.reply_text(_ui("لوحة التحكم:", "Control Panel:"))
+        await control_panel(update, context)
     else:
         await query.edit_message_text(_ui("الإجراء غير معروف", "Unknown action"))
-
-async def control_panel_from_query(query, context):
-    try:
-        # حذف الرسالة الحالية أولاً
-        await query.message.delete()
-        
-        # إرسال رسالة جديدة مع لوحة التحكم
-        from telegram import Update, Message, Chat
-        from datetime import datetime
-        
-        # إنشاء كائنات وهمية بشكل صحيح
-        fake_chat = Chat(id=query.message.chat.id, type=query.message.chat.type)
-        fake_message = Message(
-            message_id=query.message.message_id,
-            date=datetime.now(),
-            chat=fake_chat,
-            from_user=query.from_user,
-            text="/control"
-        )
-        fake_update = Update(update_id=0, message=fake_message)
-        
-        await control_panel(fake_update, context)
-        
-    except Exception as e:
-        logger.error(f"Error in control_panel_from_query: {e}")
-        # بديل: إرسال رسالة جديدة مباشرة
-        await query.message.reply_text(_ui("لوحة التحكم:", "Control Panel:"))
-        await control_panel(Update(update_id=0, message=query.message), context)
 
 # ================= وظائف لوحة التحكم =================
 async def show_user_list(query):
@@ -401,21 +342,12 @@ async def show_user_list(query):
     buttons = []
     for user_id, user_data in list(users.items())[:10]:
         btn_text = f"{user_data['full_name']} ({user_data['status']})"
-        buttons.append([InlineKeyboardButton(
-            btn_text, 
-            callback_data=f"user_detail_{user_id}"
-        )])
+        buttons.append([InlineKeyboardButton(btn_text, callback_data=f"user_detail_{user_id}")])
 
     if len(users) > 10:
-        buttons.append([InlineKeyboardButton(
-            _ui("الصفحة التالية →", "Next Page →"), 
-            callback_data="user_page_2"
-        )])
+        buttons.append([InlineKeyboardButton(_ui("الصفحة التالية →", "Next Page →"), callback_data="user_page_2")])
 
-    buttons.append([InlineKeyboardButton(
-        _ui("◀ العودة", "◀ Back"), 
-        callback_data="back_to_control"
-    )])
+    buttons.append([InlineKeyboardButton(_ui("◀ العودة", "◀ Back"), callback_data="back_to_control")])
 
     kb = InlineKeyboardMarkup(buttons)
     await query.edit_message_text(_ui("قائمة المستخدمين:", "User List:"), reply_markup=kb)
@@ -429,32 +361,12 @@ async def show_user_detail(query, user_id):
         return
 
     text = _ui(
-        f"🧑 **تفاصيل المستخدم**\n\n"
-        f"الاسم: {user_data['full_name']}\n"
-        f"المعرف: @{user_data['username']}\n"
-        f"الحالة: {user_data['status']}\n\n"
-        f"📅 تاريخ التسجيل: {user_data['join_date']}\n"
-        f"⏱ آخر نشاط: {user_data['last_activity']}\n\n"
-        f"📤 الملفات المرسلة: {user_data['files_sent']}\n"
-        f"🧠 الاختبارات المكتملة: {user_data['quizzes_taken']}\n"
-        f"💯 إجمالي النقاط: {user_data['total_score']}",
-
-        f"🧑 **User Details**\n\n"
-        f"Name: {user_data['full_name']}\n"
-        f"Username: @{user_data['username']}\n"
-        f"Status: {user_data['status']}\n\n"
-        f"📅 Join Date: {user_data['join_date']}\n"
-        f"⏱ Last Activity: {user_data['last_activity']}\n\n"
-        f"📤 Files Sent: {user_data['files_sent']}\n"
-        f"🧠 Quizzes Completed: {user_data['quizzes_taken']}\n"
-        f"💯 Total Score: {user_data['total_score']}"
+        f"🧑 **تفاصيل المستخدم**\n\nالاسم: {user_data['full_name']}\nالمعرف: @{user_data['username']}\nالحالة: {user_data['status']}\n\n📅 تاريخ التسجيل: {user_data['join_date']}\n⏱ آخر نشاط: {user_data['last_activity']}\n\n📤 الملفات المرسلة: {user_data['files_sent']}\n🧠 الاختبارات المكتملة: {user_data['quizzes_taken']}\n💯 إجمالي النقاط: {user_data['total_score']}",
+        f"🧑 **User Details**\n\nName: {user_data['full_name']}\nUsername: @{user_data['username']}\nStatus: {user_data['status']}\n\n📅 Join Date: {user_data['join_date']}\n⏱ Last Activity: {user_data['last_activity']}\n\n📤 Files Sent: {user_data['files_sent']}\n🧠 Quizzes Completed: {user_data['quizzes_taken']}\n💯 Total Score: {user_data['total_score']}"
     )
 
     kb = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(_ui("📁 ملفات المستخدم", "User Files"), callback_data=f"user_files_{user_id}"),
-            InlineKeyboardButton(_ui("📝 أحداث المستخدم", "User Events"), callback_data=f"user_events_{user_id}")
-        ],
+        [InlineKeyboardButton(_ui("📁 ملفات المستخدم", "User Files"), callback_data=f"user_files_{user_id}")],
         [InlineKeyboardButton(_ui("◀ العودة", "◀ Back"), callback_data="user_mgmt")]
     ])
 
@@ -464,21 +376,11 @@ async def show_user_files(query, user_id):
     data = load_data()
     user_files = [f for f in data["files"] if f["user_id"] == user_id]
 
-    text = _ui(
-        f"📁 الملفات المرسلة بواسطة المستخدم:\n\n",
-        f"📁 Files Sent by User:\n\n"
-    )
-
+    text = _ui("📁 الملفات المرسلة بواسطة المستخدم:\n\n", "📁 Files Sent by User:\n\n")
     for file in user_files[:5]:
-        text += _ui(
-            f"• {file['filename']} ({file['timestamp']})\n",
-            f"• {file['filename']} ({file['timestamp']})\n"
-        )
+        text += _ui(f"• {file['filename']} ({file['timestamp']})\n", f"• {file['filename']} ({file['timestamp']})\n")
 
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(_ui("◀ العودة", "◀ Back"), callback_data=f"user_detail_{user_id}")]
-    ])
-
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton(_ui("◀ العودة", "◀ Back"), callback_data=f"user_detail_{user_id}")]])
     await query.edit_message_text(text, reply_markup=kb)
 
 async def show_file_list(query):
@@ -487,15 +389,9 @@ async def show_file_list(query):
 
     text = _ui("📁 آخر 10 ملفات معالجة:\n\n", "📁 Last 10 Processed Files:\n\n")
     for file in files:
-        text += _ui(
-            f"• {file['filename']} ({file['size_mb']:.1f}MB) - {file['timestamp']}\n",
-            f"• {file['filename']} ({file['size_mb']:.1f}MB) - {file['timestamp']}\n"
-        )
+        text += _ui(f"• {file['filename']} ({file['size_mb']:.1f}MB) - {file['timestamp']}\n", f"• {file['filename']} ({file['size_mb']:.1f}MB) - {file['timestamp']}\n")
 
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(_ui("◀ العودة", "◀ Back"), callback_data="back_to_control")]
-    ])
-
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton(_ui("◀ العودة", "◀ Back"), callback_data="back_to_control")]])
     await query.edit_message_text(text, reply_markup=kb)
 
 async def show_event_log(query):
@@ -504,15 +400,9 @@ async def show_event_log(query):
 
     text = _ui("📝 آخر 10 أحداث:\n\n", "📝 Last 10 Events:\n\n")
     for event in events:
-        text += _ui(
-            f"• [{event['timestamp']}] {event['type']} بواسطة {event['user_id']}\n",
-            f"• [{event['timestamp']}] {event['type']} by {event['user_id']}\n"
-        )
+        text += _ui(f"• [{event['timestamp']}] {event['type']} بواسطة {event['user_id']}\n", f"• [{event['timestamp']}] {event['type']} by {event['user_id']}\n")
 
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(_ui("◀ العودة", "◀ Back"), callback_data="back_to_control")]
-    ])
-
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton(_ui("◀ العودة", "◀ Back"), callback_data="back_to_control")]])
     await query.edit_message_text(text, reply_markup=kb)
 
 async def show_detailed_stats(query):
@@ -520,25 +410,11 @@ async def show_detailed_stats(query):
     stats = data["statistics"]
 
     text = _ui(
-        f"📊 **الإحصائيات التفصيلية**\n\n"
-        f"👥 إجمالي المستخدمين: {stats['total_users']}\n"
-        f"📤 الملفات المعالجة: {stats['files_processed']}\n"
-        f"🧠 الاختبارات المكتملة: {stats['quizzes_taken']}\n"
-        f"🔥 المستخدمون النشطون اليوم: {stats['active_today']}\n\n"
-        f"📈 معدل النشاط اليومي: {stats['files_processed'] / max(1, stats['active_today']):.1f} ملف/مستخدم",
-
-        f"📊 **Detailed Statistics**\n\n"
-        f"👥 Total Users: {stats['total_users']}\n"
-        f"📤 Files Processed: {stats['files_processed']}\n"
-        f"🧠 Quizzes Completed: {stats['quizzes_taken']}\n"
-        f"🔥 Active Users Today: {stats['active_today']}\n\n"
-        f"📈 Daily Activity Rate: {stats['files_processed'] / max(1, stats['active_today']):.1f} files/user"
+        f"📊 **الإحصائيات التفصيلية**\n\n👥 إجمالي المستخدمين: {stats['total_users']}\n📤 الملفات المعالجة: {stats['files_processed']}\n🧠 الاختبارات المكتملة: {stats['quizzes_taken']}\n🔥 المستخدمون النشطون اليوم: {stats['active_today']}\n\n📈 معدل النشاط اليومي: {stats['files_processed'] / max(1, stats['active_today']):.1f} ملف/مستخدم",
+        f"📊 **Detailed Statistics**\n\n👥 Total Users: {stats['total_users']}\n📤 Files Processed: {stats['files_processed']}\n🧠 Quizzes Completed: {stats['quizzes_taken']}\n🔥 Active Users Today: {stats['active_today']}\n\n📈 Daily Activity Rate: {stats['files_processed'] / max(1, stats['active_today']):.1f} files/user"
     )
 
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(_ui("◀ العودة", "◀ Back"), callback_data="back_to_control")]
-    ])
-
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton(_ui("◀ العودة", "◀ Back"), callback_data="back_to_control")]])
     await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
 async def export_data_menu(query):
@@ -547,7 +423,6 @@ async def export_data_menu(query):
         [InlineKeyboardButton("CSV", callback_data="export_csv")],
         [InlineKeyboardButton(_ui("◀ العودة", "◀ Back"), callback_data="back_to_control")]
     ])
-
     await query.edit_message_text(_ui("اختر صيغة التصدير:", "Choose export format:"), reply_markup=kb)
 
 @admin_only
@@ -558,24 +433,16 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data_type == "export_json":
         try:
-            # إنشاء ملف مؤقت
+            data = load_data()
             with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as tmp_file:
-                json.dump(load_data(), tmp_file, ensure_ascii=False, indent=2)
+                json.dump(data, tmp_file, ensure_ascii=False, indent=2)
                 tmp_file_path = tmp_file.name
             
-            # إرسال الملف
             with open(tmp_file_path, 'rb') as file_to_send:
-                await context.bot.send_document(
-                    chat_id=ADMIN_ID,
-                    document=file_to_send,
-                    filename='bot_data.json'
-                )
+                await context.bot.send_document(chat_id=ADMIN_ID, document=file_to_send, filename='bot_data.json')
             
-            # حذف الملف المؤقت
             os.unlink(tmp_file_path)
-            
             await query.edit_message_text(_ui("تم تصدير البيانات بنجاح ✅", "Data exported successfully ✅"))
-            
         except Exception as e:
             logger.error(f"Error exporting data: {e}")
             await query.edit_message_text(_ui("حدث خطأ أثناء التصدير", "Error during export"))
@@ -588,7 +455,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
-    # التحقق من نوع الملف
     if update.message.document:
         doc = update.message.document
         size_mb = doc.file_size / (1024 * 1024)
@@ -616,7 +482,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(_ui("الرجاء إرسال ملف أو صورة.", "Please send a file or image."))
         return
 
-    # تسجيل الملف في النظام
     data = load_data()
     data["files"].append({
         "user_id": user_id,
@@ -626,16 +491,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "status": "processing"
     })
 
-    # تحديث إحصائيات المستخدم
     if str(user_id) in data["users"]:
         data["users"][str(user_id)]["files_sent"] += 1
         data["users"][str(user_id)]["last_activity"] = datetime.now().isoformat()
 
     save_data(data)
-    log_event(user_id, "file_upload", {
-        "filename": filename,
-        "size": size_mb
-    })
+    log_event(user_id, "file_upload", {"filename": filename, "size": size_mb})
 
     SESSIONS[chat_id] = {
         "stage": "await_lang",
@@ -661,19 +522,14 @@ async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(_ui("لا يوجد ملف قيد المعالجة.", "No pending file."))
         return
 
-    # حفظ لغة المحتوى
     content_lang = "ar" if query.data == "lang_ar" else "en"
     LANG_MANAGER.set_content_lang(chat_id, content_lang)
     
-    # عرض خيارات لغة الاختبار
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("العربية", callback_data="quiz_ar")],
         [InlineKeyboardButton("English", callback_data="quiz_en")],
     ])
-    await query.edit_message_text(
-        _ui("اختر لغة الأسئلة:", "Choose quiz language:"), 
-        reply_markup=kb
-    )
+    await query.edit_message_text(_ui("اختر لغة الأسئلة:", "Choose quiz language:"), reply_markup=kb)
     sess["stage"] = "await_quiz_lang"
 
 async def choose_quiz_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -686,14 +542,12 @@ async def choose_quiz_language(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text(_ui("لا يوجد ملف قيد المعالجة.", "No pending file."))
         return
 
-    # حفظ لغة الاختبار
     quiz_lang = "ar" if query.data == "quiz_ar" else "en"
     LANG_MANAGER.set_quiz_lang(chat_id, quiz_lang)
     
     sess["stage"] = "processing"
     await query.edit_message_text(_ui("جاري تحليل الملف وإعداده… ⏳", "Analyzing the file… ⏳"))
 
-    # استخراج النص
     with tempfile.NamedTemporaryFile(delete=False, suffix=sess["suffix"]) as f:
         f.write(sess["file_bytes"])
         tmp_path = f.name
@@ -719,7 +573,6 @@ async def choose_quiz_language(update: Update, context: ContextTypes.DEFAULT_TYP
 
     await context.bot.send_message(chat_id=chat_id, text=_ui("جاري توليد أسئلة قوية بالذكاء الاصطناعي… ⏳", "Generating strong questions with AI… ⏳"))
 
-    # توليد الأسئلة مع مراعاة اللغات
     content_lang = LANG_MANAGER.get_content_lang(chat_id)
     quiz_lang = LANG_MANAGER.get_quiz_lang(chat_id)
     
@@ -750,22 +603,13 @@ async def send_next_question(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if sess["index"] >= len(sess["questions"]):
-        # انتهاء الاختبار
-        score_text = _ui(
-            f"انتهى الاختبار! نتيجتك: {sess['score']}/{len(sess['questions'])} ✅",
-            f"Done! Your score: {sess['score']}/{len(sess['questions'])} ✅"
-        )
+        score_text = _ui(f"انتهى الاختبار! نتيجتك: {sess['score']}/{len(sess['questions'])} ✅", f"Done! Your score: {sess['score']}/{len(sess['questions'])} ✅")
         await context.bot.send_message(chat_id=chat_id, text=score_text)
 
-        # تسجيل إكمال الاختبار
         user_id = sess.get("user_id")
         if user_id:
-            log_event(user_id, "quiz_completed", {
-                "score": sess['score'],
-                "total": len(sess['questions'])
-            })
+            log_event(user_id, "quiz_completed", {"score": sess['score'], "total": len(sess['questions'])})
             
-            # تحديث إحصائيات المستخدم
             data = load_data()
             if str(user_id) in data["users"]:
                 data["users"][str(user_id)]["quizzes_taken"] += 1
@@ -781,7 +625,7 @@ async def send_next_question(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     try:
         msg = await context.bot.send_poll(
             chat_id=chat_id,
-            question=q["question"][:300],  # زيادة الحد إلى 300 حرف
+            question=q["question"][:300],
             options=q["options"][:10],
             type=Poll.QUIZ,
             correct_option_id=int(q["correct"]),
@@ -792,7 +636,6 @@ async def send_next_question(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         sess["index"] += 1
     except Exception as e:
         logger.error(f"Error sending poll: {e}")
-        # تخطي السؤال في حالة خطأ
         sess["index"] += 1
         await send_next_question(chat_id, context)
 
@@ -804,7 +647,6 @@ async def receive_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
             if answer.option_ids and answer.option_ids[0] == correct:
                 sess["score"] += 1
 
-            # تسجيل نتيجة الاختبار
             user_id = answer.user.id
             data = load_data()
             if str(user_id) in data["users"]:
@@ -828,27 +670,23 @@ def main():
     print(f"👑 ADMIN_ID: {ADMIN_ID}")
     print("=" * 50)
     
-    # تحميل البيانات الأولية
+    # إصلاح البيانات أولاً
     try:
+        data = load_data()
+        if isinstance(data.get("statistics"), list):
+            print("🔄 إصلاح structure البيانات...")
+            new_data = create_new_data()
+            new_data["users"] = data.get("users", {})
+            new_data["files"] = data.get("files", [])
+            new_data["events"] = data.get("events", [])
+            save_data(new_data)
+        
         refresh_user_lists()
         print("✅ تم تحميل البيانات بنجاح")
-        print(f"✅ المستخدمون المسموحون: {len(allowed_users)}")
-        print(f"✅ المستخدمون المحظورون: {len(banned_users)}")
-        print(f"✅ المستخدمون المنتظرون: {len(pending_users)}")
+        
     except Exception as e:
         print(f"❌ خطأ في تحميل البيانات: {e}")
-        # إنشاء بيانات جديدة إذا فشل التحميل
-        save_data({
-            "users": {},
-            "files": [],
-            "events": [],
-            "statistics": {
-                "total_users": 0,
-                "active_today": 0,
-                "files_processed": 0,
-                "quizzes_taken": 0
-            }
-        })
+        save_data(create_new_data())
         refresh_user_lists()
         print("✅ تم إنشاء بيانات جديدة")
     
@@ -862,54 +700,24 @@ def main():
 
     # إضافة المعالجات
     app.add_handler(CommandHandler("start", cmd_start))
-    print("✅ معالج /start مضاف")
-    
     app.add_handler(CommandHandler("cancel", cmd_cancel))
-    print("✅ معالج /cancel مضاف")
-    
     app.add_handler(CommandHandler("control", control_panel))
-    print("✅ معالج /control مضاف")
-    
     app.add_handler(CallbackQueryHandler(handle_approval, pattern=r"^(approve|reject)_\d+$"))
-    print("✅ معالج الموافقة مضاف")
-    
     app.add_handler(CallbackQueryHandler(choose_language, pattern=r"^lang_(ar|en)$"))
-    print("✅ معالج اللغة مضاف")
-    
     app.add_handler(CallbackQueryHandler(choose_quiz_language, pattern=r"^quiz_(ar|en)$"))
-    print("✅ معالج لغة الاختبار مضاف")
-    
     app.add_handler(CallbackQueryHandler(handle_export, pattern=r"^export_(json|csv)$"))
-    print("✅ معالج التصدير مضاف")
-    
     app.add_handler(CallbackQueryHandler(handle_control_buttons))
-    print("✅ معالج أزرار التحكم مضاف")
-    
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_document))
-    print("✅ معالج الملفات مضاف")
-    
     app.add_handler(PollAnswerHandler(receive_poll_answer))
-    print("✅ معالج الإجابات مضاف")
-    
-    # معالج للأخطاء العامة
+
+    # معالج الأخطاء
     async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"حدث خطأ: {context.error}")
-        try:
-            if update and hasattr(update, 'effective_message') and update.effective_message:
-                await update.effective_message.reply_text(
-                    _ui("حدث خطأ غير متوقع. يرجى المحاولة لاحقاً.", "An unexpected error occurred. Please try again later.")
-                )
-        except Exception as e:
-            logger.error(f"Error in error handler: {e}")
     
     app.add_error_handler(error_handler)
-    print("✅ معالج الأخطاء مضاف")
     
     print("🤖 البوت يعمل الآن...")
-    try:
-        app.run_polling()
-    except Exception as e:
-        print(f"❌ خطأ في تشغيل البوت: {e}")
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
