@@ -589,11 +589,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     })
 
     SESSIONS[chat_id] = {
-        "stage": "await_lang",
-        "filename": filename,
-        "suffix": suffix,
-        "file_bytes": bytes(file_bytes),
-    }
+    "stage": "await_lang",
+    "filename": filename,
+    "suffix": suffix,
+    "file_bytes": bytes(file_bytes),
+    "content_lang": None,  # سيتم تعيينها لاحقاً
+    "question_lang": None,  # سيتم تعيينها لاحقاً
+}
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("العربية", callback_data="lang_ar")],
@@ -612,7 +614,18 @@ async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     lang = "ar" if query.data == "lang_ar" else "en"
-    sess["lang"] = lang
+    sess["content_lang"] = lang
+    sess["stage"] = "await_question_lang"
+    
+    # عرض خيارات لغة الأسئلة
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("العربية", callback_data="qlang_ar")],
+        [InlineKeyboardButton("English", callback_data="qlang_en")],
+    ])
+    await query.edit_message_text(
+        _ui("اختر لغة أسئلة الاختبار:", "Choose the quiz questions language:"), 
+        reply_markup=kb
+    )
     sess["stage"] = "processing"
     await query.edit_message_text(_ui("جاري تحليل الملف وإعداده… ⏳", "Analyzing the file… ⏳"))
 
@@ -647,6 +660,53 @@ async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sess.update({"questions": questions, "index":0, "score": 0, "answers": {}, "stage": "quiz"})
     await send_next_question(chat_id, context)
 
+
+async def choose_question_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    chat_id = query.message.chat.id
+    sess = SESSIONS.get(chat_id)
+    if not sess or sess.get("stage") != "await_question_lang":
+        await query.edit_message_text(_ui("لا يوجد ملف قيد المعالجة.", "No pending file."))
+        return
+
+    lang = "ar" if query.data == "qlang_ar" else "en"
+    sess["question_lang"] = lang
+    sess["stage"] = "processing"
+    await query.edit_message_text(_ui("جاري تحليل الملف وإعداده… ⏳", "Analyzing the file… ⏳"))
+
+    # استخراج النص باستخدام لغة المحتوى
+    with tempfile.NamedTemporaryFile(delete=False, suffix=sess["suffix"]) as f:
+        f.write(sess["file_bytes"])
+        tmp_path = f.name
+
+    try:
+        text = await extract_text_any(tmp_path, sess["suffix"], sess["content_lang"])
+    except Exception:
+        text = ""
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+    text = _clean_text(text)
+    if not text or len(text) < 400:
+        await context.bot.send_message(chat_id=chat_id, text=_ui("تعذر استخراج نص كافٍ حتى بعد OCR. جرّب ملفًا أوضح.", "Couldn't extract enough text (even with OCR). Try a clearer file."))
+        SESSIONS.pop(chat_id, None)
+        return
+
+    await context.bot.send_message(chat_id=chat_id, text=_ui("جاري توليد أسئلة قوية بالذكاء الاصطناعي… ⏳", "Generating strong questions with AI… ⏳"))
+
+    # استخدام لغة الأسئلة المختارة
+    questions = await build_quiz_from_text(text, lang=sess["question_lang"], target_total=40)
+    if not questions:
+        await context.bot.send_message(chat_id=chat_id, text=_ui("تعذّر توليد أسئلة كافية. حاول ملفًا آخر.", "Failed to generate enough questions. Try another file."))
+        SESSIONS.pop(chat_id, None)
+        return
+
+    sess.update({"questions": questions, "index":0, "score": 0, "answers": {}, "stage": "quiz"})
+    await send_next_question(chat_id, context)
 # ================= إرسال الأسئلة التالية =================
 async def send_next_question(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     sess = SESSIONS.get(chat_id)
@@ -726,6 +786,8 @@ def main():
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_document))
     # أزرار اختيار اللغة
     app.add_handler(CallbackQueryHandler(choose_language, pattern=r"^lang_(ar|en)$"))
+    # إضافة هذا المعالج بعد المعالجات الأخرى
+    app.add_handler(CallbackQueryHandler(choose_question_language, pattern=r"^qlang_(ar|en)$"))
     # أزرار الموافقة / الرفض
     app.add_handler(CallbackQueryHandler(handle_approval, pattern=r"^(approve|reject)_\d+$"))
     # أزرار لوحة التحكم
