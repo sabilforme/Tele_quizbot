@@ -318,46 +318,141 @@ async def control_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
 
-# ================= معالج أزرار لوحة التحكم =================
+# ================= نظام إدارة اللغات =================
+class LanguageManager:
+    def __init__(self):
+        self.content_lang = {}  # لغة محتوى الملف
+        self.quiz_lang = {}     # لغة الأسئلة
+
+    def set_content_lang(self, chat_id, lang):
+        self.content_lang[chat_id] = lang
+
+    def set_quiz_lang(self, chat_id, lang):
+        self.quiz_lang[chat_id] = lang
+
+    def get_content_lang(self, chat_id):
+        return self.content_lang.get(chat_id, "ar")
+
+    def get_quiz_lang(self, chat_id):
+        return self.quiz_lang.get(chat_id, "ar")
+
+LANG_MANAGER = LanguageManager()
+
+# ================= تحديث دالة اختيار اللغة =================
+async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    chat_id = query.message.chat.id
+    sess = SESSIONS.get(chat_id)
+    if not sess or sess.get("stage") != "await_lang":
+        await query.edit_message_text(_ui("لا يوجد ملف قيد المعالجة.", "No pending file."))
+        return
+
+    # حفظ لغة المحتوى
+    content_lang = "ar" if query.data == "lang_ar" else "en"
+    LANG_MANAGER.set_content_lang(chat_id, content_lang)
+    
+    # عرض خيارات لغة الاختبار
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("العربية", callback_data="quiz_ar")],
+        [InlineKeyboardButton("English", callback_data="quiz_en")],
+    ])
+    await query.edit_message_text(
+        _ui("اختر لغة الأسئلة:", "Choose quiz language:"), 
+        reply_markup=kb
+    )
+    sess["stage"] = "await_quiz_lang"
+
+# ================= اختيار لغة الاختبار =================
+async def choose_quiz_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    chat_id = query.message.chat.id
+    sess = SESSIONS.get(chat_id)
+    if not sess or sess.get("stage") != "await_quiz_lang":
+        await query.edit_message_text(_ui("لا يوجد ملف قيد المعالجة.", "No pending file."))
+        return
+
+    # حفظ لغة الاختبار
+    quiz_lang = "ar" if query.data == "quiz_ar" else "en"
+    LANG_MANAGER.set_quiz_lang(chat_id, quiz_lang)
+    
+    sess["stage"] = "processing"
+    await query.edit_message_text(_ui("جاري تحليل الملف وإعداده… ⏳", "Analyzing the file… ⏳"))
+
+    # استخراج النص
+    with tempfile.NamedTemporaryFile(delete=False, suffix=sess["suffix"]) as f:
+        f.write(sess["file_bytes"])
+        tmp_path = f.name
+
+    try:
+        content_lang = LANG_MANAGER.get_content_lang(chat_id)
+        text = await extract_text_any(tmp_path, sess["suffix"], content_lang)
+    except Exception:
+        text = ""
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+    text = _clean_text(text)
+    if not text or len(text) < 400:
+        await context.bot.send_message(chat_id=chat_id, text=_ui("تعذر استخراج نص كافٍ حتى بعد OCR. جرّب ملفًا أوضح.", "Couldn't extract enough text (even with OCR). Try a clearer file."))
+        SESSIONS.pop(chat_id, None)
+        return
+
+    await context.bot.send_message(chat_id=chat_id, text=_ui("جاري توليد أسئلة قوية بالذكاء الاصطناعي… ⏳", "Generating strong questions with AI… ⏳"))
+
+    # توليد الأسئلة مع مراعاة اللغات
+    content_lang = LANG_MANAGER.get_content_lang(chat_id)
+    quiz_lang = LANG_MANAGER.get_quiz_lang(chat_id)
+    
+    questions = await build_quiz_from_text(text, content_lang=content_lang, quiz_lang=quiz_lang, target_total=40)
+    if not questions:
+        await context.bot.send_message(chat_id=chat_id, text=_ui("تعذّر توليد أسئلة كافية. حاول ملفًا آخر.", "Failed to generate enough questions. Try another file."))
+        SESSIONS.pop(chat_id, None)
+        return
+
+    sess.update({"questions": questions, "index":0, "score": 0, "answers": {}, "stage": "quiz"})
+    await send_next_question(chat_id, context)
+
+# ================= إصلاح أزرار العودة =================
 async def handle_control_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
 
-    # قائمة المستخدمين
     if data == "user_mgmt":
         await show_user_list(query)
-    
-    # قائمة الملفات
     elif data == "file_list":
         await show_file_list(query)
-    
-    # سجل الأحداث
     elif data == "event_log":
         await show_event_log(query)
-    
-    # الإحصائيات التفصيلية
     elif data == "stats_detailed":
         await show_detailed_stats(query)
-    
-    # تصدير البيانات
     elif data == "export_data":
         await export_data_menu(query)
-    
-    # تفاصيل المستخدم
     elif data.startswith("user_detail_"):
         user_id = int(data.split("_")[2])
         await show_user_detail(query, user_id)
-    
-    # ملفات المستخدم
     elif data.startswith("user_files_"):
         user_id = int(data.split("_")[2])
         await show_user_files(query, user_id)
-    
-    # العودة إلى لوحة التحكم
     elif data == "back_to_control":
-        await control_panel(query.message, context)
+        # إصلاح مشكلة العودة إلى لوحة التحكم
         await query.message.delete()
+        await control_panel_from_query(query, context)
+    elif data == "user_mgmt_back":
+        await show_user_list(query)
+    else:
+        await query.edit_message_text(_ui("الإجراء غير معروف", "Unknown action"))
+
+# إضافة دالة مساعدة للعودة إلى لوحة التحكم
+async def control_panel_from_query(query, context):
+    message = query.message
+    update = Update(update_id=0, message=message)
+    await control_panel(update, context)
 
 # ===== عرض قائمة المستخدمين =====
 async def show_user_list(query):
