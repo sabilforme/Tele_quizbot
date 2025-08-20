@@ -812,7 +812,7 @@ async def receive_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
                 user_data["last_activity"] = datetime.now().isoformat()
                 save_data(data)
 
-                        log_event(user_id, "quiz_answer", {
+            log_event(user_id, "quiz_answer", {
                 "question_index": sess["index"],
                 "is_correct": answer.option_ids and answer.option_ids[0] == correct
             })
