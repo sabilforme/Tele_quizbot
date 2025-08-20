@@ -15,6 +15,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+from telegram import BotCommand
 
 from qa_builder import build_quiz_from_text
 from ingest import extract_text_any
@@ -744,13 +745,21 @@ async def receive_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
             await send_next_question(chat_id, context)
             break
 
+async def set_bot_commands(application):
+    """إعداد قائمة الأوامر في واجهة المستخدم"""
+    commands = [
+        BotCommand("start", _ui("بدء استخدام البوت", "Start the bot")),
+        BotCommand("cancel", _ui("إلغاء العملية الحالية", "Cancel current process")),
+        BotCommand("control", _ui("لوحة تحكم المدير", "Admin control panel")),
+    ]
+    await application.bot.set_my_commands(commands)
 # ================= تشغيل البوت =================
 def main():
     token = os.getenv("BOT_TOKEN")
     if not token:
         raise SystemExit("Set BOT_TOKEN env var")
     app = ApplicationBuilder().token(token).build()
-
+    app.post_init = set_bot_commands
     # أوامر المستخدم
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("cancel", cmd_cancel))
