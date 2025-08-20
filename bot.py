@@ -615,9 +615,9 @@ async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lang = "ar" if query.data == "lang_ar" else "en"
     sess["content_lang"] = lang
-    sess["stage"] = "await_question_lang"
+    sess["stage"] = "await_question_lang"  # الانتقال لمرحلة اختيار لغة الأسئلة فقط
     
-    # عرض خيارات لغة الأسئلة
+    # عرض خيارات لغة الأسئلة بشكل منفصل
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("العربية", callback_data="qlang_ar")],
         [InlineKeyboardButton("English", callback_data="qlang_en")],
@@ -626,40 +626,6 @@ async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _ui("اختر لغة أسئلة الاختبار:", "Choose the quiz questions language:"), 
         reply_markup=kb
     )
-    sess["stage"] = "processing"
-    await query.edit_message_text(_ui("جاري تحليل الملف وإعداده… ⏳", "Analyzing the file… ⏳"))
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=sess["suffix"]) as f:
-        f.write(sess["file_bytes"])
-        tmp_path = f.name
-
-    try:
-        text = await extract_text_any(tmp_path, sess["suffix"], lang)
-    except Exception:
-        text = ""
-    finally:
-        try:
-            os.remove(tmp_path)
-        except Exception:
-            pass
-
-    text = _clean_text(text)
-    if not text or len(text) < 400:
-        await context.bot.send_message(chat_id=chat_id, text=_ui("تعذر استخراج نص كافٍ حتى بعد OCR. جرّب ملفًا أوضح.", "Couldn't extract enough text (even with OCR). Try a clearer file."))
-        SESSIONS.pop(chat_id, None)
-        return
-
-    await context.bot.send_message(chat_id=chat_id, text=_ui("جاري توليد أسئلة قوية بالذكاء الاصطناعي… ⏳", "Generating strong questions with AI… ⏳"))
-
-    questions = await build_quiz_from_text(text, lang=lang, target_total=40)
-    if not questions:
-        await context.bot.send_message(chat_id=chat_id, text=_ui("تعذّر توليد أسئلة كافية. حاول ملفًا آخر.", "Failed to generate enough questions. Try another file."))
-        SESSIONS.pop(chat_id, None)
-        return
-
-    sess.update({"questions": questions, "index":0, "score": 0, "answers": {}, "stage": "quiz"})
-    await send_next_question(chat_id, context)
-
 
 async def choose_question_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -672,8 +638,17 @@ async def choose_question_language(update: Update, context: ContextTypes.DEFAULT
 
     lang = "ar" if query.data == "qlang_ar" else "en"
     sess["question_lang"] = lang
+    
+    # الانتقال مباشرة إلى دالة المعالجة المشتركة
+    await start_file_processing(chat_id, context)
+    
+async def start_file_processing(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    sess = SESSIONS.get(chat_id)
+    if not sess:
+        return
+
     sess["stage"] = "processing"
-    await query.edit_message_text(_ui("جاري تحليل الملف وإعداده… ⏳", "Analyzing the file… ⏳"))
+    await context.bot.send_message(chat_id=chat_id, text=_ui("جاري تحليل الملف وإعداده… ⏳", "Analyzing the file… ⏳"))
 
     # استخراج النص باستخدام لغة المحتوى
     with tempfile.NamedTemporaryFile(delete=False, suffix=sess["suffix"]) as f:
