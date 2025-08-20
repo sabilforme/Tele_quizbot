@@ -103,22 +103,22 @@ def load_data() -> Dict:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             
-        # التأكد من وجود الهيكل الأساسي للبيانات
-        required_keys = ["users", "files", "events", "statistics"]
-        for key in required_keys:
-            if key not in data:
-                data[key] = {} if key == "users" else []
-        
-        # إصلاح مشكلة statistics إذا كان قائمة بدلاً من قاموس
-        if isinstance(data["statistics"], list):
+        # إصلاح: التحقق من نوع statistics
+        if isinstance(data.get("statistics"), list):
             data["statistics"] = {
                 "total_users": 0,
                 "active_today": 0,
                 "files_processed": 0,
                 "quizzes_taken": 0
             }
-        elif isinstance(data["statistics"], dict):
-            # التأكد من وجود جميع المفاتيح في statistics
+        
+        # التأكد من وجود الهيكل الأساسي للبيانات
+        required_keys = ["users", "files", "events", "statistics"]
+        for key in required_keys:
+            if key not in data:
+                data[key] = {} if key == "users" else []
+        
+        if "statistics" in data and isinstance(data["statistics"], dict):
             stats_keys = ["total_users", "active_today", "files_processed", "quizzes_taken"]
             for key in stats_keys:
                 if key not in data["statistics"]:
@@ -126,7 +126,7 @@ def load_data() -> Dict:
                     
         return data
     except (FileNotFoundError, json.JSONDecodeError):
-        # إنشاء بيانات جديدة إذا كان الملف غير موجود أو تالف
+        # إنشاء بيانات جديدة
         return {
             "users": {},
             "files": [],
@@ -138,6 +138,7 @@ def load_data() -> Dict:
                 "quizzes_taken": 0
             }
         }
+
 def save_data(data: Dict):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
@@ -365,14 +366,32 @@ async def handle_control_buttons(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text(_ui("الإجراء غير معروف", "Unknown action"))
 
 async def control_panel_from_query(query, context):
-    # إنشاء رسالة وهمية للعودة إلى لوحة التحكم
-    from telegram import Message, Chat
-    fake_chat = Chat(id=query.message.chat_id, type="private")
-    fake_message = Message(message_id=query.message.message_id, date=query.message.date, chat=fake_chat)
-    fake_update = Update(update_id=0, message=fake_message)
-    
-    await control_panel(fake_update, context)
-    await query.message.delete()
+    try:
+        # حذف الرسالة الحالية أولاً
+        await query.message.delete()
+        
+        # إرسال رسالة جديدة مع لوحة التحكم
+        from telegram import Update, Message, Chat
+        from datetime import datetime
+        
+        # إنشاء كائنات وهمية بشكل صحيح
+        fake_chat = Chat(id=query.message.chat.id, type=query.message.chat.type)
+        fake_message = Message(
+            message_id=query.message.message_id,
+            date=datetime.now(),
+            chat=fake_chat,
+            from_user=query.from_user,
+            text="/control"
+        )
+        fake_update = Update(update_id=0, message=fake_message)
+        
+        await control_panel(fake_update, context)
+        
+    except Exception as e:
+        logger.error(f"Error in control_panel_from_query: {e}")
+        # بديل: إرسال رسالة جديدة مباشرة
+        await query.message.reply_text(_ui("لوحة التحكم:", "Control Panel:"))
+        await control_panel(Update(update_id=0, message=query.message), context)
 
 # ================= وظائف لوحة التحكم =================
 async def show_user_list(query):
@@ -535,22 +554,32 @@ async def export_data_menu(query):
 async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    data = query.data
+    data_type = query.data
 
-    if data == "export_json":
-        # إنشاء ملف JSON مؤقت
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as tmp_file:
-            json.dump(load_data(), tmp_file, ensure_ascii=False, indent=2)
-            tmp_file.flush()
+    if data_type == "export_json":
+        try:
+            # إنشاء ملف مؤقت
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as tmp_file:
+                json.dump(load_data(), tmp_file, ensure_ascii=False, indent=2)
+                tmp_file_path = tmp_file.name
             
-            await context.bot.send_document(
-                chat_id=ADMIN_ID,
-                document=open(tmp_file.name, 'rb'),
-                filename='bot_data.json'
-            )
+            # إرسال الملف
+            with open(tmp_file_path, 'rb') as file_to_send:
+                await context.bot.send_document(
+                    chat_id=ADMIN_ID,
+                    document=file_to_send,
+                    filename='bot_data.json'
+                )
             
-        await query.edit_message_text(_ui("تم تصدير البيانات بنجاح ✅", "Data exported successfully ✅"))
-    elif data == "export_csv":
+            # حذف الملف المؤقت
+            os.unlink(tmp_file_path)
+            
+            await query.edit_message_text(_ui("تم تصدير البيانات بنجاح ✅", "Data exported successfully ✅"))
+            
+        except Exception as e:
+            logger.error(f"Error exporting data: {e}")
+            await query.edit_message_text(_ui("حدث خطأ أثناء التصدير", "Error during export"))
+    elif data_type == "export_csv":
         await query.edit_message_text(_ui("هذه الميزة قيد التطوير", "This feature is under development"))
 
 # ================= معالجة الملفات والاختبارات =================
@@ -783,7 +812,7 @@ async def receive_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
                 user_data["last_activity"] = datetime.now().isoformat()
                 save_data(data)
 
-            log_event(user_id, "quiz_answer", {
+                        log_event(user_id, "quiz_answer", {
                 "question_index": sess["index"],
                 "is_correct": answer.option_ids and answer.option_ids[0] == correct
             })
@@ -793,28 +822,94 @@ async def receive_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # ================= تشغيل البوت =================
 def main():
+    print("=" * 50)
+    print("🚀 بدء تشغيل البوت...")
+    print(f"🔑 BOT_TOKEN: {BOT_TOKEN[:10]}...")
+    print(f"👑 ADMIN_ID: {ADMIN_ID}")
+    print("=" * 50)
+    
     # تحميل البيانات الأولية
-    refresh_user_lists()
+    try:
+        refresh_user_lists()
+        print("✅ تم تحميل البيانات بنجاح")
+        print(f"✅ المستخدمون المسموحون: {len(allowed_users)}")
+        print(f"✅ المستخدمون المحظورون: {len(banned_users)}")
+        print(f"✅ المستخدمون المنتظرون: {len(pending_users)}")
+    except Exception as e:
+        print(f"❌ خطأ في تحميل البيانات: {e}")
+        # إنشاء بيانات جديدة إذا فشل التحميل
+        save_data({
+            "users": {},
+            "files": [],
+            "events": [],
+            "statistics": {
+                "total_users": 0,
+                "active_today": 0,
+                "files_processed": 0,
+                "quizzes_taken": 0
+            }
+        })
+        refresh_user_lists()
+        print("✅ تم إنشاء بيانات جديدة")
     
     # بناء التطبيق
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    try:
+        app = ApplicationBuilder().token(BOT_TOKEN).build()
+        print("✅ تم بناء التطبيق بنجاح")
+    except Exception as e:
+        print(f"❌ خطأ في بناء التطبيق: {e}")
+        return
 
     # إضافة المعالجات
     app.add_handler(CommandHandler("start", cmd_start))
+    print("✅ معالج /start مضاف")
+    
     app.add_handler(CommandHandler("cancel", cmd_cancel))
+    print("✅ معالج /cancel مضاف")
+    
     app.add_handler(CommandHandler("control", control_panel))
+    print("✅ معالج /control مضاف")
     
     app.add_handler(CallbackQueryHandler(handle_approval, pattern=r"^(approve|reject)_\d+$"))
+    print("✅ معالج الموافقة مضاف")
+    
     app.add_handler(CallbackQueryHandler(choose_language, pattern=r"^lang_(ar|en)$"))
+    print("✅ معالج اللغة مضاف")
+    
     app.add_handler(CallbackQueryHandler(choose_quiz_language, pattern=r"^quiz_(ar|en)$"))
+    print("✅ معالج لغة الاختبار مضاف")
+    
     app.add_handler(CallbackQueryHandler(handle_export, pattern=r"^export_(json|csv)$"))
+    print("✅ معالج التصدير مضاف")
+    
     app.add_handler(CallbackQueryHandler(handle_control_buttons))
+    print("✅ معالج أزرار التحكم مضاف")
     
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_document))
+    print("✅ معالج الملفات مضاف")
+    
     app.add_handler(PollAnswerHandler(receive_poll_answer))
-
-    print("Bot running…")
-    app.run_polling()
+    print("✅ معالج الإجابات مضاف")
+    
+    # معالج للأخطاء العامة
+    async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+        logger.error(f"حدث خطأ: {context.error}")
+        try:
+            if update and hasattr(update, 'effective_message') and update.effective_message:
+                await update.effective_message.reply_text(
+                    _ui("حدث خطأ غير متوقع. يرجى المحاولة لاحقاً.", "An unexpected error occurred. Please try again later.")
+                )
+        except Exception as e:
+            logger.error(f"Error in error handler: {e}")
+    
+    app.add_error_handler(error_handler)
+    print("✅ معالج الأخطاء مضاف")
+    
+    print("🤖 البوت يعمل الآن...")
+    try:
+        app.run_polling()
+    except Exception as e:
+        print(f"❌ خطأ في تشغيل البوت: {e}")
 
 if __name__ == "__main__":
     main()
