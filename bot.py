@@ -109,7 +109,16 @@ def load_data() -> Dict:
             if key not in data:
                 data[key] = {} if key == "users" else []
         
-        if "statistics" in data:
+        # إصلاح مشكلة statistics إذا كان قائمة بدلاً من قاموس
+        if isinstance(data["statistics"], list):
+            data["statistics"] = {
+                "total_users": 0,
+                "active_today": 0,
+                "files_processed": 0,
+                "quizzes_taken": 0
+            }
+        elif isinstance(data["statistics"], dict):
+            # التأكد من وجود جميع المفاتيح في statistics
             stats_keys = ["total_users", "active_today", "files_processed", "quizzes_taken"]
             for key in stats_keys:
                 if key not in data["statistics"]:
@@ -129,7 +138,6 @@ def load_data() -> Dict:
                 "quizzes_taken": 0
             }
         }
-
 def save_data(data: Dict):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
