@@ -17,6 +17,8 @@ from telegram.ext import (
 )
 from telegram import BotCommand
 
+from telegram import Bot, Update, Poll, InlineKeyboardMarkup, InlineKeyboardButton
+
 from qa_builder import build_quiz_from_text
 from ingest import extract_text_any
 
