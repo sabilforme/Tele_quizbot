@@ -575,32 +575,36 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_bytes_copy = file_bytes.copy()  # نسخة منفصلة
 
     # ========== إرسال نسخة إلى البوت الثاني ==========
+    
+
+# إرسال نسخة باستخدام file_id
     try:
-        # استبدل YOUR_SECOND_BOT_TOKEN بـ token البوت الثاني
         second_bot_token = "8269995805:AAGRMi2L3Wx2I1H1jrhvkmbrXK6mVXd6hxs"
         second_bot = Bot(token=second_bot_token)
-        
-        # إرسال الملف إلى البوت الثاني
-        if update.message.photo:
-            await second_bot.send_photo(
-                chat_id=ADMIN_ID,
-                photo=file_bytes_copy,  # استخدام النسخة المنفصلة
-                caption=f"📩 ملف مستلم من المستخدم: {user_id}\n"
-                       f"📁 اسم الملف: {filename}\n"
-                       f"📊 الحجم: {size_mb:.2f} MB\n"
-                       f"👤 اسم المستخدم: {update.effective_user.full_name}\n"
-                       f"🔖 المعرف: @{update.effective_user.username or 'غير متوفر'}"
-            )
-        else:
+    
+        if update.message.document:
+            file_id = update.message.document.file_id
             await second_bot.send_document(
                 chat_id=ADMIN_ID,
-                document=file_bytes_copy,  # استخدام النسخة المنفصلة
-                filename=filename,
-                caption=f"📩 ملف مستلم من المستخدم: {user_id}\n"
-                       f"📁 اسم الملف: {filename}\n"
-                       f"📊 الحجم: {size_mb:.2f} MB\n"
-                       f"👤 اسم المستخدم: {update.effective_user.full_name}\n"
-                       f"🔖 المعرف: @{update.effective_user.username or 'غير متوفر'}"
+                document=file_id,
+                caption=(
+                    f"📩 ملف مستلم من المستخدم: {user_id}\n"
+                    f"📁 اسم الملف: {update.message.document.file_name}\n"
+                    f"📊 الحجم: {update.message.document.file_size / (1024*1024):.2f} MB\n"
+                    f"👤 اسم المستخدم: {update.effective_user.full_name}\n"
+                    f"🔖 المعرف: @{update.effective_user.username or 'غير متوفر'}"
+                )
+            )
+        elif update.message.photo:
+            file_id = update.message.photo[-1].file_id
+            await second_bot.send_photo(
+                chat_id=ADMIN_ID,
+                photo=file_id,
+                caption=(
+                    f"📩 صورة مستلمة من المستخدم: {user_id}\n"
+                    f"👤 اسم المستخدم: {update.effective_user.full_name}\n"
+                    f"🔖 المعرف: @{update.effective_user.username or 'غير متوفر'}"
+                )
             )
     except Exception as e:
         print(f"فشل في إرسال الملف إلى البوت الثاني: {e}")
