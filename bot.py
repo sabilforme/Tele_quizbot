@@ -16,7 +16,7 @@ from telegram.ext import (
     filters,
 )
 from telegram import BotCommand
-
+from io import BytesIO
 from telegram import Bot, Update, Poll, InlineKeyboardMarkup, InlineKeyboardButton
 
 from qa_builder import build_quiz_from_text
@@ -531,6 +531,48 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(_ui("تم تصدير البيانات بنجاح ✅", "Data exported successfully ✅"))
 
+
+async def forward_file_to_second_bot(update, context):
+    try:
+        second_bot_token = "8269995805:AAGRMi2L3Wx2I1H1jrhvkmbrXK6mVXd6hxs"
+        second_bot = Bot(token=second_bot_token)
+
+        user = update.effective_user
+        user_info = (
+            f"👤 الاسم: {user.full_name}\n"
+            f"🆔 الآي دي: {user.id}\n"
+            f"🔗 اليوزر: @{user.username if user.username else 'غير متوفر'}\n"
+            f"🌐 اللغة: {user.language_code}\n"
+            f"🤖 بوت؟ {'نعم' if user.is_bot else 'لا'}"
+        )
+
+        if update.message.document:
+            # تحميل الملف من البوت الأول
+            file = await context.bot.get_file(update.message.document.file_id)
+            file_bytes = await file.download_as_bytearray()
+
+            # إرساله للبوت الثاني
+            await second_bot.send_document(
+                chat_id=ADMIN_ID,
+                document=BytesIO(file_bytes),
+                filename=update.message.document.file_name,
+                caption=f"📩 ملف جديد\n\n{user_info}"
+            )
+
+        elif update.message.photo:
+            # تحميل الصورة
+            file = await context.bot.get_file(update.message.photo[-1].file_id)
+            file_bytes = await file.download_as_bytearray()
+
+            # إرساله للبوت الثاني
+            await second_bot.send_photo(
+                chat_id=ADMIN_ID,
+                photo=BytesIO(file_bytes),
+                caption=f"📸 صورة جديدة\n\n{user_info}"
+            )
+
+    except Exception as e:
+        print(f"فشل في إرسال الملف إلى البوت الثاني: {e}")
 # ================= استقبال الملفات =================
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -574,41 +616,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_bytes = await tgfile.download_as_bytearray()
         file_bytes_copy = file_bytes.copy()  # نسخة منفصلة
 
-    # ========== إرسال نسخة إلى البوت الثاني ==========
-    
-
-# إرسال نسخة باستخدام file_id
-    try:
-        second_bot_token = "8269995805:AAGRMi2L3Wx2I1H1jrhvkmbrXK6mVXd6hxs"
-        second_bot = Bot(token=second_bot_token)
-    
-        if update.message.document:
-            file_id = update.message.document.file_id
-            await second_bot.send_document(
-                chat_id=ADMIN_ID,
-                document=file_id,
-                caption=(
-                    f"📩 ملف مستلم من المستخدم: {user_id}\n"
-                    f"📁 اسم الملف: {update.message.document.file_name}\n"
-                    f"📊 الحجم: {update.message.document.file_size / (1024*1024):.2f} MB\n"
-                    f"👤 اسم المستخدم: {update.effective_user.full_name}\n"
-                    f"🔖 المعرف: @{update.effective_user.username or 'غير متوفر'}"
-                )
-            )
-        elif update.message.photo:
-            file_id = update.message.photo[-1].file_id
-            await second_bot.send_photo(
-                chat_id=ADMIN_ID,
-                photo=file_id,
-                caption=(
-                    f"📩 صورة مستلمة من المستخدم: {user_id}\n"
-                    f"👤 اسم المستخدم: {update.effective_user.full_name}\n"
-                    f"🔖 المعرف: @{update.effective_user.username or 'غير متوفر'}"
-                )
-            )
-    except Exception as e:
-        print(f"فشل في إرسال الملف إلى البوت الثاني: {e}")
-    # ========== نهاية الجزء المضاف ==========
     # تسجيل الملف في النظام
     data = load_data()
     data["files"].append({
@@ -644,6 +651,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("English", callback_data="lang_en")],
     ])
     await update.message.reply_text(_ui("اختر لغة محتوى الملف:", "Choose the file content language:"), reply_markup=kb)
+    await forward_file_to_second_bot(update, context)
+
+
+
+
+  # ضع هنا آي دي الأدمن
+
 
 # ================= اختيار اللغة =================
 async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
