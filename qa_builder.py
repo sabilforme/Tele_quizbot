@@ -1,4 +1,4 @@
-خimport random
+import random
 from typing import List, Dict
 from llm import ask_llm_big
 
