@@ -20,7 +20,15 @@ def _normalize_item(it: Dict, lang: str) -> Dict:
                 opts.append("—")
         elif len(opts) > 4:
             opts = opts[:4]
-
+    # قص الخيارات الطويلة مسبقاً
+    truncated_opts = []
+    for opt in opts:
+        if len(opt) > 100:
+            truncated_opts.append(opt[:97] + "...")
+        else:
+            truncated_opts.append(opt)
+    
+    opts = truncated_opts
     c = it.get("correct", 0)
     try:
         c = int(c)
