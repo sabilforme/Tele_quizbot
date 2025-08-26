@@ -1,4 +1,4 @@
-import random
+خimport random
 from typing import List, Dict
 from llm import ask_llm_big
 
@@ -53,4 +53,4 @@ async def build_quiz_from_text(text: str, lang: str = "ar") -> List[Dict]:
 
     random.shuffle(cleaned)
     # خذ العدد المطلوب أو أقل عند الحاجة
-    return cleaned[:target_total]
+    return cleaned
