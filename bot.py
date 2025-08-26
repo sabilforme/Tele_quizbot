@@ -730,7 +730,7 @@ async def start_file_processing(chat_id: int, context: ContextTypes.DEFAULT_TYPE
     await context.bot.send_message(chat_id=chat_id, text=_ui("جاري توليد أسئلة قوية بالذكاء الاصطناعي… ⏳", "Generating strong questions with AI… ⏳"))
 
     # استخدام لغة الأسئلة المختارة
-    questions = await build_quiz_from_text(text, lang=sess["question_lang"], target_total=40)
+    questions = await build_quiz_from_text(text, lang=sess["question_lang"])
     if not questions:
         await context.bot.send_message(chat_id=chat_id, text=_ui("تعذّر توليد أسئلة كافية. حاول ملفًا آخر.", "Failed to generate enough questions. Try another file."))
         SESSIONS.pop(chat_id, None)
