@@ -31,8 +31,8 @@ def _normalize_item(it: Dict, lang: str) -> Dict:
     return {"type": t, "question": q, "options": opts, "correct": c}
 
 
-async def build_quiz_from_text(text: str, lang: str = "ar", target_total: int = 30) -> List[Dict]:
-    items = await ask_llm_big(text, lang=lang, target_total=target_total)
+async def build_quiz_from_text(text: str, lang: str = "ar") -> List[Dict]:
+    items = await ask_llm_big(text, lang=lang)
     cleaned = []
     seen_q = set()
 
