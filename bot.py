@@ -808,34 +808,71 @@ async def set_bot_commands(application):
         BotCommand("control", _ui("لوحة تحكم المدير", "Admin control panel")),
     ]
     await application.bot.set_my_commands(commands)
-# ================= تشغيل البوت =================
+# ================= تشغيل البوت (النسخة المبسطة) =================
+from flask import Flask, request
+import os
+
+# تطبيق Flask الأساسي
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return '🤖 Bashar QuizBot Vip is Running!'
+
+@app.route('/health')
+def health():
+    return '✅ Healthy'
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    """استقبال تحديثات Telegram"""
+    if request.method == "POST":
+        update = Update.de_json(request.get_json(), application.bot)
+        application.process_update(update)
+    return 'OK'
+
 def main():
+    global application
     token = os.getenv("BOT_TOKEN")
     if not token:
-        raise SystemExit("Set BOT_TOKEN env var")
-    app = ApplicationBuilder().token(token).build()
-    app.post_init = set_bot_commands
-    # أوامر المستخدم
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("cancel", cmd_cancel))
-    app.add_handler(CommandHandler("control", control_panel))
-    app.add_handler(CallbackQueryHandler(handle_export, pattern=r"^export_(json|csv)$"))
+        raise SystemExit("❌ Set BOT_TOKEN env var")
 
-    # استقبال الملفات
-    app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_document))
-    # أزرار اختيار اللغة
-    app.add_handler(CallbackQueryHandler(choose_language, pattern=r"^lang_(ar|en)$"))
-    # إضافة هذا المعالج بعد المعالجات الأخرى
-    app.add_handler(CallbackQueryHandler(choose_question_language, pattern=r"^qlang_(ar|en)$"))
-    # أزرار الموافقة / الرفض
-    app.add_handler(CallbackQueryHandler(handle_approval, pattern=r"^(approve|reject)_\d+$"))
-    # أزرار لوحة التحكم
-    app.add_handler(CallbackQueryHandler(handle_control_buttons))
-    # استقبال إجابات الاختبار
-    app.add_handler(PollAnswerHandler(receive_poll_answer))
+    # بناء البوت
+    application = ApplicationBuilder().token(token).build()
+    application.post_init = set_bot_commands
+    
+    # إعداد handlers (نفس الكود السابق)
+    application.add_handler(CommandHandler("start", cmd_start))
+    application.add_handler(CommandHandler("cancel", cmd_cancel))
+    application.add_handler(CommandHandler("control", control_panel))
+    application.add_handler(CallbackQueryHandler(handle_export, pattern=r"^export_(json|csv)$"))
+    application.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_document))
+    application.add_handler(CallbackQueryHandler(choose_language, pattern=r"^lang_(ar|en)$"))
+    application.add_handler(CallbackQueryHandler(choose_question_language, pattern=r"^qlang_(ar|en)$"))
+    application.add_handler(CallbackQueryHandler(handle_approval, pattern=r"^(approve|reject)_\d+$"))
+    application.add_handler(CallbackQueryHandler(handle_control_buttons))
+    application.add_handler(PollAnswerHandler(receive_poll_answer))
 
-    print("Bot running…")
-    app.run_polling(close_loop=False)
+    # التشغيل على Render
+    if os.environ.get("RENDER"):
+        print("🌐 Setting up webhook for Render...")
+        
+        # إعداد webhook
+        async def setup_wh():
+            webhook_url = f"https://your-app-name.onrender.com/webhook"
+            await application.bot.set_webhook(webhook_url)
+            print(f"✅ Webhook ready: {webhook_url}")
+        
+        import asyncio
+        asyncio.run(setup_wh())
+        
+        # تشغيل Flask على المنفذ المطلوب
+        port = int(os.environ.get("PORT", 8443))
+        app.run(host='0.0.0.0', port=port, debug=False)
+    else:
+        # التشغيل المحلي
+        print("💻 Running locally...")
+        application.run_polling()
 
 if __name__ == "__main__":
     main()
