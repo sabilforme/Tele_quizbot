@@ -859,7 +859,7 @@ def main():
         
         # إعداد webhook
         async def setup_wh():
-            webhook_url = f"https://your-app-name.onrender.com/webhook"
+            webhook_url = f"https://tele-quizbot.onrender.com/webhook"
             await application.bot.set_webhook(webhook_url)
             print(f"✅ Webhook ready: {webhook_url}")
         
